@@ -621,3 +621,27 @@ gf.disposition <- function(TS,nwin=66){
 }
 
 
+
+
+#' gf.smartQ
+#'
+#'
+#' @export
+gf.smartQ <- function(TS) {
+
+
+  dates <- unique(TS$date)
+  periodicity_Ndays(dates)
+  for(i in dates){
+    tmp <- subset(TS,date==i)
+    stocks <- stockID2stockID(unique(TS$stockID),'local','ts')
+    begT <- trday.nearby(min(TS$date),-20)
+    endT <- max(TS$date)
+    variables <- c("open","close","vol")
+    qtdata <- getQuote_ts(stocks,begT,endT,variables,Cycle = 'cy_1m()')
+  }
+
+
+
+
+}
