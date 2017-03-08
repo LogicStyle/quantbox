@@ -6,6 +6,9 @@
 \usage{
 getIndexBasicInfo(indexID)
 }
+\arguments{
+\item{indexID}{is set of index ID.}
+}
 \description{
 getIndexBasicInfo
 }

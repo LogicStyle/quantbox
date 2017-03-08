@@ -1283,7 +1283,7 @@ percent <- function(x, digits = 2, format = "f", ...) {
 #' getIndexBasicInfo
 #'
 #'
-#' @param indexID
+#' @param indexID is set of index ID.
 #' @examples
 #' index <- getIndexBasicInfo('EI000300')
 #' index <- getIndexBasicInfo(c('EI000300','EI000905'))
