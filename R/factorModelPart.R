@@ -461,7 +461,17 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 # ===================== series of gf functions  ===========================
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
 
+gf.PE_ttm_raw <- function(TS){
+  funchar <- "StockPE3_V()"
+  re <- TS.getTech_ts(TS,funchar,varname="factorscore")
+  return(re)
+}
 
+gf.PB_mrq_raw <- function(TS){
+  funchar <- "StockPNA3_II()"
+  re <- TS.getTech_ts(TS,funchar,varname="factorscore")
+  return(re)
+}
 
 
 #' gf.smartQ
