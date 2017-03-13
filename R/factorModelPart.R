@@ -468,19 +468,40 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 #'
 #'
 #' @export
-gf.smartQ <- function(TS) {
+gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()') {
 
 
   dates <- unique(TS$date)
-  periodicity_Ndays(dates)
   for(i in dates){
     tmp <- subset(TS,date==i)
-    stocks <- stockID2stockID(unique(TS$stockID),'local','ts')
-    begT <- trday.nearby(min(TS$date),-20)
-    endT <- max(TS$date)
+    stocks <- stockID2stockID(unique(tmp$stockID),'local','ts')
+    begT <- trday.nearby(i,-20)
+    endT <- i
     variables <- c("open","close","vol")
-    qtdata <- getQuote_ts(stocks,begT,endT,variables,Cycle = 'cy_1m()')
+    tmp.dates <- getRebDates(begT,endT)
+
+    qtdata <- getQuote_ts(stocks,begT,begT,variables,Cycle = cycle)
+
+
   }
+
+
+  con <- db.ts()
+  alldata <- data.frame()
+  for(i in stocks){
+    cat(match(i,stocks),i,'\n')
+    sqlstr <- paste("setsysparam(pn_stock(),",QT(i),");
+    setsysparam(pn_cycle(), cy_1m());
+    setsysparam(pn_date(), inttodate(20161230)+15/24);
+    return nday(500,'date',datetimetostr(sp_time()),'open',open(),
+      'close',close(),'vol', Vol());",sep='')
+    t <- sqlQuery(con,sqlstr)
+    t$stockID <- i
+    alldata <- rbind(alldata,t)
+  }
+
+
+
 
 
 

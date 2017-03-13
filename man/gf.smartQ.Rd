@@ -4,7 +4,7 @@
 \alias{gf.smartQ}
 \title{gf.smartQ}
 \usage{
-gf.smartQ(TS)
+gf.smartQ(TS, nwin = 20, cycle = "cy_1m()")
 }
 \description{
 gf.smartQ

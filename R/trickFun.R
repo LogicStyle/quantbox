@@ -1159,34 +1159,51 @@ db.ts <- function(){
 
 
 
-#' calculate fund's tracking error
+#' fundTE
 #'
+#' calculate fund's tracking error
 #' @param fundID is fund ID.
 #' @param begT is begin date.
 #' @param endT is end date, default value is \bold{today}.
-#' @param  scale is number of periods in a year,default value is 250.
+#' @param scale is number of periods in a year,default value is 250.
+#' @param digit is digit.
 #' @examples
-#' library(WindR)
-#' w.start(showmenu = F)
 #' te <- fundTE(fundID='162411.OF',begT=as.Date('2013-06-28'))
-#' te <- fundTE(fundID='501018.OF',begT=as.Date('2016-06-28'))
+#' te <- fundTE(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
 #' @export
-fundTE <- function(fundID,begT,endT=Sys.Date(),scale=250){
-  if(missing(begT)){
-    begT<-w.wss(fundID,'fund_setupdate')[[2]]
-    begT <- w.asDateTime(begT$FUND_SETUPDATE,asdate = T)
+fundTE <- function(fundID,begT,endT=Sys.Date(),scale=250,digit=3){
+  require(WindR)
+  WindR::w.start(showmenu = F)
+  if(length(fundID)>1){
+    if(missing(begT)){
+      begT<-w.wss(fundID,'fund_setupdate')[[2]]
+      begT <- w.asDateTime(begT$FUND_SETUPDATE,asdate = T)
+    }
+
+    if(length(begT)==1){
+      begT <- rep(begT,length(fundID))
+    }
+    if(length(endT)==1){
+      endT <- rep(endT,length(fundID))
+    }
   }
 
-  fundts <-w.wsd(fundID,"NAV_adj_return1",begT,endT,"Fill=Previous")[[2]]
-  tmp <- w.wss(fundID,'fund_benchindexcode')[[2]]
-  tmp <- tmp$FUND_BENCHINDEXCODE
-  benchts <-w.wsd(tmp,"pct_chg",begT,endT,"Fill=Previous")[[2]]
-  allts <- merge(fundts,benchts,by='DATETIME')
-  allts <- na.omit(allts)
-  allts <- transform(allts,NAV_ADJ_RETURN1=NAV_ADJ_RETURN1/100,PCT_CHG=PCT_CHG/100)
-  allts <- xts::xts(allts[,-1],order.by = allts[,1])
-  re <- round(PerformanceAnalytics::TrackingError(allts[,1],allts[,2],scale = scale),digits = 3)
-  return(re)
+  df <- data.frame(fundID,begT,endT)
+  df$TE <- c(0)
+  for(i in 1:length(fundID)){
+    fundts <-w.wsd(fundID[i],"NAV_adj_return1",begT[i],endT[i],"Fill=Previous")[[2]]
+    tmp <- w.wss(fundID[i],'fund_benchindexcode')[[2]]
+    tmp <- tmp$FUND_BENCHINDEXCODE
+    benchts <-w.wsd(tmp,"pct_chg",begT[i],endT[i],"Fill=Previous")[[2]]
+    allts <- merge(fundts,benchts,by='DATETIME')
+    allts <- na.omit(allts)
+    allts <- transform(allts,NAV_ADJ_RETURN1=NAV_ADJ_RETURN1/100,PCT_CHG=PCT_CHG/100)
+    allts <- xts::xts(allts[,-1],order.by = allts[,1])
+    re <- round(PerformanceAnalytics::TrackingError(allts[,1],allts[,2],scale = scale),digits = digit)
+    df$TE[i] <- re
+  }
+
+  return(df)
 }
 
 

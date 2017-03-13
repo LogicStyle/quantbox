@@ -2,9 +2,9 @@
 % Please edit documentation in R/trickFun.R
 \name{fundTE}
 \alias{fundTE}
-\title{calculate fund's tracking error}
+\title{fundTE}
 \usage{
-fundTE(fundID, begT, endT = Sys.Date(), scale = 250)
+fundTE(fundID, begT, endT = Sys.Date(), scale = 250, digit = 3)
 }
 \arguments{
 \item{fundID}{is fund ID.}
@@ -14,14 +14,14 @@ fundTE(fundID, begT, endT = Sys.Date(), scale = 250)
 \item{endT}{is end date, default value is \bold{today}.}
 
 \item{scale}{is number of periods in a year,default value is 250.}
+
+\item{digit}{is digit.}
 }
 \description{
 calculate fund's tracking error
 }
 \examples{
-library(WindR)
-w.start(showmenu = F)
 te <- fundTE(fundID='162411.OF',begT=as.Date('2013-06-28'))
-te <- fundTE(fundID='501018.OF',begT=as.Date('2016-06-28'))
+te <- fundTE(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
 }
 
