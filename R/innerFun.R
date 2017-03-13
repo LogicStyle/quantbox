@@ -408,9 +408,9 @@ lcdb.build.QT_IndexTiming<- function(){
       if(i==1){
         tmp <- getRebDates(min(indexDate$begT),max(indexDate$endT),'day')
         tmp <- getTS(tmp,indexID = 'EI801003')
-        alldata <- gf.PE_ttm(tmp)
+        alldata <- gf.PE_ttm_raw(tmp)
         alldata <- dplyr::rename(alldata,pettm=factorscore)
-        tmp <- gf.PB_mrq(tmp)
+        tmp <- gf.PB_mrq_raw(tmp)
         tmp <- dplyr::rename(tmp,pbmrq=factorscore)
         alldata <- merge(alldata,tmp,by=c('date','stockID'))
       }
@@ -520,9 +520,9 @@ lcdb.addindex.QT_IndexTiming<- function(indexset){
     TS <- dbGetQuery(con,qr)
     TS$date <- intdate2r(TS$date)
 
-    alldata <- gf.PE_ttm(TS)
+    alldata <- gf.PE_ttm_raw(TS)
     alldata <- dplyr::rename(alldata,pettm=factorscore)
-    tmp <- gf.PB_mrq(TS)
+    tmp <- gf.PB_mrq_raw(TS)
     tmp <- dplyr::rename(tmp,pbmrq=factorscore)
     alldata <- merge(alldata,tmp,by=c('date','stockID'))
 
