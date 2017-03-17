@@ -342,26 +342,6 @@ gf.F_ROE_new <- function(TS){
 
 
 
-gf.dividend <- function(TS){
-  begT <- min(TS$date)
-  endT <- max(TS$date)
-  tmp <- paste("('",paste(substr(unique(TS$stockID),3,8),collapse = "','"),"')",sep="")
-  qr <- paste("SELECT convert(varchar,TradingDay,112) 'date',
-              'EQ'+s.SecuCode 'stockID',DividendRatio 'factorscore'
-              FROM LC_DIndicesForValuation d,SecuMain s
-              where d.InnerCode=s.InnerCode and s.SecuCode in",tmp,
-              " and d.TradingDay>=",QT(begT)," and d.TradingDay<=",QT(endT),
-              " ORDER by d.TradingDay")
-  con <- db.jy()
-  re <- sqlQuery(con,qr)
-  odbcClose(con)
-  re$date <- intdate2r(re$date)
-  TSF <- merge.x(TS,re)
-  return(TSF)
-}
-
-
-
 
 
 lcdb.build.QT_IndexTiming<- function(){

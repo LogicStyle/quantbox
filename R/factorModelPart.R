@@ -461,6 +461,20 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 # ===================== series of gf functions  ===========================
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
 
+#' get factor
+#'
+#' @param TS is \bold{TS} object.
+#' @name get_factor
+#' @return a TSF
+#' @examples
+#' RebDates <- getRebDates(as.Date('2011-03-17'),as.Date('2012-04-17'),'month')
+#' TS <- getTS(RebDates,'EI000300')
+#' TSF <- gf.smartQ(TS)
+#' TSF <- gf.dividend(TS)
+#' TSF <- gf.doublePrice(TS)
+NULL
+
+
 gf.PE_ttm_raw <- function(TS){
   funchar <- "StockPE3_V()"
   re <- TS.getTech_ts(TS,funchar,varname="factorscore")
@@ -474,10 +488,8 @@ gf.PB_mrq_raw <- function(TS){
 }
 
 
-#' gf.smartQ
-#'
-#' @examples
-#' TSF <- gf.smartQ(TS)
+
+#' @rdname get_factor
 #' @export
 gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()',bar=0.2) {
   #load data
@@ -519,3 +531,63 @@ gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()',bar=0.2) {
 }
 
 
+
+
+#' @rdname get_factor
+#' @export
+gf.doublePrice <- function(TS,ROEType=c('ROE_ttm','F_ROE','ROE','ROE_Q')){
+  ROEType <- match.arg(ROEType)
+
+  TSF <- gf.PB_mrq(TS)
+  if(ROEType=='ROE_ttm'){
+    tmp <- gf.ROE_ttm(TS)
+    tmp <- tmp[,c("date","stockID","factorscore")]
+    tmp <- transform(tmp,factorscore=factorscore/100)
+  }else if(ROEType=='F_ROE'){
+    tmp <- gf.F_ROE(TS)
+    tmp <- tmp[,c("date","stockID","factorscore")]
+
+  }else if(ROEType=='ROE'){
+    tmp <- gf.ROE(TS)
+    tmp <- tmp[,c("date","stockID","factorscore")]
+    tmp <- transform(tmp,factorscore=factorscore/100)
+  }else{
+    tmp <- gf.ROE_Q(TS)
+    tmp <- tmp[,c("date","stockID","factorscore")]
+    tmp <- transform(tmp,factorscore=factorscore/100)
+  }
+
+  TSF <- dplyr::left_join(TSF,tmp,by=c('date','stockID'))
+  colnames(TSF) <- c("date","stockID","PB_mrq_","ROE")
+  TSF <- na.omit(TSF)
+  TSF <- dplyr::filter(TSF,PB_mrq_!=0)
+  TSF <- dplyr::filter(TSF,ROE>0)
+
+  TSF$factorscore <- log(TSF$PB_mrq_*2,base=(1+TSF$ROE))
+  TSF <- TSF[,c("date","stockID","factorscore")]
+  TSF <- dplyr::left_join(TS,TSF,by=c('date','stockID'))
+  return(TSF)
+}
+
+
+
+
+#' @rdname get_factor
+#' @export
+gf.dividend <- function(TS){
+  begT <- min(TS$date)
+  endT <- max(TS$date)
+  tmp <- paste("('",paste(substr(unique(TS$stockID),3,8),collapse = "','"),"')",sep="")
+  qr <- paste("SELECT convert(varchar,TradingDay,112) 'date',
+              'EQ'+s.SecuCode 'stockID',DividendRatio 'factorscore'
+              FROM LC_DIndicesForValuation d,SecuMain s
+              where d.InnerCode=s.InnerCode and s.SecuCode in",tmp,
+              " and d.TradingDay>=",QT(begT)," and d.TradingDay<=",QT(endT),
+              " ORDER by d.TradingDay")
+  con <- db.jy()
+  re <- sqlQuery(con,qr)
+  odbcClose(con)
+  re$date <- intdate2r(re$date)
+  TSF <- merge.x(TS,re)
+  return(TSF)
+}
