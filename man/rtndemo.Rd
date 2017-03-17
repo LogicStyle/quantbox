@@ -18,4 +18,3 @@ rtndemo
 A dataset containing stock index(000985.CSI), bond index(037.CS) and commodity(GC00.CMX) daily return data since 2009.
 }
 \keyword{datasets}
-

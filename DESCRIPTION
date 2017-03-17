@@ -12,4 +12,4 @@ Suggests:
     plyr,reshape2,lubridate,stringr,xts,ggplot2,
     testthat
 LazyData: TRUE
-RoxygenNote: 5.0.1
+RoxygenNote: 6.0.1

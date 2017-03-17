@@ -16,4 +16,3 @@ lcdb.update.CorpStockPool
 filenames <- c('D:/sqlitedb/core.csv','D:/sqlitedb/preclose.csv')
 lcdb.update.CorpStockPool(filenames)
 }
-

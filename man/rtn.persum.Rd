@@ -29,4 +29,3 @@ rtn.persum(rtn)
 
 \code{\link[QUtility]{rtn.summary}}
 }
-

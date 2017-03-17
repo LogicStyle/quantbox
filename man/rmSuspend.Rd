@@ -26,4 +26,3 @@ TSnew <- rmSuspend(TS,type='today')
 \author{
 Andrew Dow
 }
-

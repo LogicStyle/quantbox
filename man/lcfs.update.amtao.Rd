@@ -21,4 +21,3 @@ endT = Sys.Date()-1
 splitNbin = "month"
 lcfs.update.amtao()
 }
-

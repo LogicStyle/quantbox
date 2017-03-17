@@ -16,4 +16,3 @@ getIndexBasicInfo
 index <- getIndexBasicInfo('EI000300')
 index <- getIndexBasicInfo(c('EI000300','EI000905'))
 }
-

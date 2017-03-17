@@ -476,44 +476,46 @@ gf.PB_mrq_raw <- function(TS){
 
 #' gf.smartQ
 #'
-#'
+#' @examples
+#' TSF <- gf.smartQ(TS)
 #' @export
-gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()') {
+gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()',bar=0.2) {
+  #load data
+  newTS <- rm_suspend(TS)
+  tmp <- newTS %>% group_by(stockID) %>%
+    summarise(begT=min(date),endT=max(date))
+  tmp <- transform(tmp,stockID=as.character(stockID)
+                   ,begT=trday.nearby(begT,-nwin))
 
+  pb <- txtProgressBar(style = 3)
+  TSF <- data.frame()
+  variables <- c("open","close","vol")
+  for(i in 1:nrow(tmp)){
+    #cat(i," : ",tmp$stockID[i],'\n')
+    stocks <- stockID2stockID(tmp$stockID[i],'local','ts')
+    qtdata <- getQuote_ts(stocks,tmp$begT[i],tmp$endT[i],variables,Cycle = cycle)
+    qtdata <- dplyr::filter(qtdata,vol>0)
+    qtdata$smart <- abs(qtdata$close/qtdata$open-1)/(qtdata$vol/100000000)
 
-  dates <- unique(TS$date)
-  for(i in dates){
-    tmp <- subset(TS,date==i)
-    stocks <- stockID2stockID(unique(tmp$stockID),'local','ts')
-    begT <- trday.nearby(i,-20)
-    endT <- i
-    variables <- c("open","close","vol")
-    tmp.dates <- getRebDates(begT,endT)
+    tmp.TS <- subset(newTS,stockID==tmp$stockID[i])
+    for(j in 1:nrow(tmp.TS)){
+      tmp.begT <- trday.nearby(tmp.TS$date[j],-nwin)
+      tmp.qtdata <- dplyr::filter(qtdata,date<=tmp.TS$date[j],date>tmp.begT)
+      tmp.qtdata <- dplyr::arrange(tmp.qtdata,dplyr::desc(smart))
+      tmp.qtdata$cumvol <- cumsum(tmp.qtdata$vol)/sum(tmp.qtdata$vol)
+      tmp.qtdatasmart <- dplyr::filter(tmp.qtdata,cumvol<=bar)
+      tmp.Q <- ((tmp.qtdatasmart$close %*% tmp.qtdatasmart$vol)/sum(tmp.qtdatasmart$vol))/((tmp.qtdata$close %*% tmp.qtdata$vol)/sum(tmp.qtdata$vol))
+      tmp.TSF <- data.frame(tmp.TS[j,],Q=tmp.Q)
+      TSF <- rbind(TSF,tmp.TSF)
+    }
 
-    qtdata <- getQuote_ts(stocks,begT,begT,variables,Cycle = cycle)
-
-
+    setTxtProgressBar(pb, i/nrow(tmp))
   }
+  close(pb)
 
-
-  con <- db.ts()
-  alldata <- data.frame()
-  for(i in stocks){
-    cat(match(i,stocks),i,'\n')
-    sqlstr <- paste("setsysparam(pn_stock(),",QT(i),");
-    setsysparam(pn_cycle(), cy_1m());
-    setsysparam(pn_date(), inttodate(20161230)+15/24);
-    return nday(500,'date',datetimetostr(sp_time()),'open',open(),
-      'close',close(),'vol', Vol());",sep='')
-    t <- sqlQuery(con,sqlstr)
-    t$stockID <- i
-    alldata <- rbind(alldata,t)
-  }
-
-
-
-
-
-
+  TSF <- dplyr::left_join(TS,TSF,by=c('date','stockID'))
+  return(TSF)
 
 }
+
+

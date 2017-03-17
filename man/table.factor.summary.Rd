@@ -27,4 +27,3 @@ table.factor.summary(TSFR)
 \author{
 Andrew Dow
 }
-

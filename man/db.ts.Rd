@@ -21,4 +21,3 @@ re <- sqlQuery(db.ts(), qr);
 \author{
 Andrew Dow
 }
-

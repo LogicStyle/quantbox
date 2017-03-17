@@ -27,10 +27,9 @@ port <- portdemo[,c('date','stockID')]
 port <- addwgt2port_amtao(port)
 port <- addwgt2port_amtao(port,wgtmax=0.1)
 }
-\author{
-Andrew Dow
-}
 \seealso{
 \code{\link[RFactorModel]{addwgt2port}}
 }
-
+\author{
+Andrew Dow
+}

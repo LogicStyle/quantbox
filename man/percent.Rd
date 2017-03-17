@@ -22,4 +22,3 @@ percent(x)
 \seealso{
 \code{\link[scales]{percent}}
 }
-

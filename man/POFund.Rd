@@ -15,4 +15,3 @@ re <- POFund(fundID,begT,endT)
 \author{
 Andrew Dow
 }
-

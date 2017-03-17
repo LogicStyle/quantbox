@@ -9,4 +9,3 @@ write.clipboard(x, row.names = FALSE, col.names = TRUE, ...)
 \description{
 write data frame to clipboard
 }
-

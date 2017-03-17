@@ -31,4 +31,3 @@ bankport <- bank.rotation(begT,endT,chgBar)
 \author{
 Andrew Dow
 }
-

@@ -16,4 +16,3 @@ re <- LLT()
 \author{
 Andrew Dow
 }
-

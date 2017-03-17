@@ -16,4 +16,3 @@ re <- getIV()
 \author{
 Andrew Dow
 }
-

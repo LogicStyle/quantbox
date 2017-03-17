@@ -17,4 +17,3 @@ re <- resumeArbitrage(begT,endT)
 \author{
 Andrew Dow
 }
-

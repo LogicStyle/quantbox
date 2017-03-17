@@ -22,4 +22,3 @@ add.index.lcdb(indexID="EI000985")
 \author{
 Andrew Dow
 }
-

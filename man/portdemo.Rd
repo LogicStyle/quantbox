@@ -12,4 +12,3 @@ portdemo
 part of index EI000905's alpha portfolio data set.
 }
 \keyword{datasets}
-

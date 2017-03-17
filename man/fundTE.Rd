@@ -24,4 +24,3 @@ calculate fund's tracking error
 te <- fundTE(fundID='162411.OF',begT=as.Date('2013-06-28'))
 te <- fundTE(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
 }
-

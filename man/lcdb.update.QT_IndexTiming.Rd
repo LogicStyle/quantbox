@@ -15,4 +15,3 @@ lcdb.update.QT_IndexTiming()
 \author{
 Andrew Dow
 }
-

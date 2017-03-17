@@ -19,4 +19,3 @@ re <- gridTrade.index(indexID,begT,endT,para)
 \author{
 Andrew Dow
 }
-

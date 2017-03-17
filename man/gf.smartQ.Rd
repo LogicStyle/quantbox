@@ -4,9 +4,11 @@
 \alias{gf.smartQ}
 \title{gf.smartQ}
 \usage{
-gf.smartQ(TS, nwin = 20, cycle = "cy_1m()")
+gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 }
 \description{
 gf.smartQ
 }
-
+\examples{
+TSF <- gf.smartQ(TS)
+}

@@ -26,4 +26,3 @@ TSnew <- rmNegativeEvents(TS)
 \author{
 Andrew Dow
 }
-

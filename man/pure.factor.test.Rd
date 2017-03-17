@@ -35,4 +35,3 @@ purefp <- pure.factor.test(TSFR,riskfactorLists)
 \author{
 Andrew Dow
 }
-

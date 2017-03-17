@@ -18,4 +18,3 @@ TSnew <- rmPriceLimit(TS,dateType='today',priceType='downLimit')
 \author{
 Andrew Dow
 }
-

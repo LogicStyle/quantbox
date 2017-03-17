@@ -15,4 +15,3 @@ re <- getIFSpread()
 \author{
 Andrew Dow
 }
-

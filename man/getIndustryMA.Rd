@@ -15,4 +15,3 @@ re <- getIndustryMA(begT=as.Date('2014-01-04'))
 \author{
 Andrew Dow
 }
-

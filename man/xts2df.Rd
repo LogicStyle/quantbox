@@ -9,4 +9,3 @@ xts2df(x)
 \description{
 turn xts to dataframe
 }
-
