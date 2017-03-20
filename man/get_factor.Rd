@@ -11,7 +11,7 @@ gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 
 gf.doublePrice(TS, ROEType = c("ROE_ttm", "F_ROE", "ROE", "ROE_Q"))
 
-gf.dividend(TS)
+gf.dividend(TS, datasrc = c("jy", "wind"))
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

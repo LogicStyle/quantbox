@@ -574,20 +574,40 @@ gf.doublePrice <- function(TS,ROEType=c('ROE_ttm','F_ROE','ROE','ROE_Q')){
 
 #' @rdname get_factor
 #' @export
-gf.dividend <- function(TS){
-  begT <- min(TS$date)
-  endT <- max(TS$date)
-  tmp <- paste("('",paste(substr(unique(TS$stockID),3,8),collapse = "','"),"')",sep="")
-  qr <- paste("SELECT convert(varchar,TradingDay,112) 'date',
+gf.dividend <- function(TS,datasrc=c('jy','wind')){
+  datasrc <- match.arg(datasrc)
+  if(datasrc=='jy'){
+    begT <- min(TS$date)
+    endT <- max(TS$date)
+    tmp <- paste("('",paste(substr(unique(TS$stockID),3,8),collapse = "','"),"')",sep="")
+    qr <- paste("SELECT convert(varchar,TradingDay,112) 'date',
               'EQ'+s.SecuCode 'stockID',DividendRatio 'factorscore'
               FROM LC_DIndicesForValuation d,SecuMain s
               where d.InnerCode=s.InnerCode and s.SecuCode in",tmp,
-              " and d.TradingDay>=",QT(begT)," and d.TradingDay<=",QT(endT),
-              " ORDER by d.TradingDay")
-  con <- db.jy()
-  re <- sqlQuery(con,qr)
-  odbcClose(con)
-  re$date <- intdate2r(re$date)
-  TSF <- merge.x(TS,re)
+                " and d.TradingDay>=",QT(begT)," and d.TradingDay<=",QT(endT),
+                " ORDER by d.TradingDay")
+    con <- db.jy()
+    re <- sqlQuery(con,qr)
+    odbcClose(con)
+    re$date <- intdate2r(re$date)
+    TSF <- merge.x(TS,re)
+  }else if(datasrc=='wind'){
+    require(WindR)
+    w.start(showmenu = FALSE)
+    newTS <- transform(TS,stockID=stockID2stockID(stockID,'local','wind'))
+    dates <- unique(TS$date)
+    re <- data.frame()
+    for(i in dates){
+      i <- as.Date(i,origin='1970-01-01')
+      tmp <- w.wss(newTS[newTS$date==i,'stockID'],'dividendyield2',tradeDate=i)[[2]]
+      colnames(tmp) <- c('stockID','factorscore')
+      tmp$date <- i
+      tmp <- tmp[,c('date','stockID','factorscore')]
+      re <- rbind(re,tmp)
+    }
+    re <- transform(re,stockID=stockID2stockID(stockID,'wind','local'))
+    TSF <- dplyr::left_join(TS,re,by=c('date','stockID'))
+  }
+
   return(TSF)
 }
