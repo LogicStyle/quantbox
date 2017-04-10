@@ -2,61 +2,6 @@
 # ===================== series of lcdb functions  ===========================
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
 
-
-MC.chart.IC2 <- function(TSFRs,Nbin="day",stat=c("pearson","spearman"),
-                         facet_by=c("date","fname")){
-  check.name_exist(TSFRs)
-  stat <- match.arg(stat)
-  facet_by <- match.arg(facet_by)
-
-  IC <- plyr::llply(TSFRs,seri.IC,stat=stat)
-  IC <- lapply(IC,function(ts){
-    df <- data.frame(date=zoo::index(ts),IC=zoo::coredata(ts))
-    df$date <- cut.Date2(df$date,Nbin)
-    df <- df %>% dplyr::group_by(date) %>% dplyr::summarise(IC=mean(IC,na.rm = TRUE))
-    return(df)
-    })
-  IC <- dplyr::bind_rows(IC,.id = 'fname')
-
-  if(facet_by=='date'){
-    ggplot(IC,aes(fname, IC)) +
-      geom_bar(stat = "identity") + facet_wrap(~date)
-  }else if(facet_by=='fname'){
-    ggplot(IC,aes(date, IC)) +
-      geom_bar(stat = "identity") + facet_wrap(~fname)
-  }
-}
-
-
-MC.chart.Ngroup.spread2 <- function(TSFRs,N=5,stat=c("mean","median"),
-                                    sectorNe=FALSE,sectorAttr=defaultSectorAttr(),
-                                    facet_by=c("date","fname")){
-  stat <- match.arg(stat)
-  facet_by <- match.arg(facet_by)
-
-  rtnseri <- plyr::llply(TSFRs,seri.Ngroup.rtn,N=N,stat=stat,sectorNe=sectorNe,sectorAttr=sectorAttr)
-  rtnseri <- lapply(rtnseri,function(ts){
-    spread <- ts[,1]-ts[,ncol(ts)]
-    spread <- WealthIndex(spread)
-    spread <- data.frame(date=zoo::index(spread),zoo::coredata(spread))
-    colnames(spread) <- c('date','spread')
-    return(spread)})
-  rtnseri <- dplyr::bind_rows(rtnseri,.id = 'fname')
-
-  if(facet_by=='date'){
-    ggplot(rtnseri, aes(x=date, y=spread, color=fname)) +
-      geom_line()
-  }else if(facet_by=='fname'){
-    ggplot(rtnseri, aes(x=date, y=spread)) +
-      geom_line()+facet_wrap(~fname)
-  }
-}
-
-
-
-
-
-
 #' add a index to local database
 #'
 #'
