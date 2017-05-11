@@ -4,7 +4,9 @@
 \alias{bank.rotation}
 \title{bank rotation}
 \usage{
-bank.rotation(begT, endT = Sys.Date() - 1, chgBar = 0.2, fee = 0.003)
+bank.rotation(begT, endT = Sys.Date() - 1, chgBar = 0.2, fee = 0.003,
+  pbfun = c("gf.PB_lyr", "gf.PB_mrq"), roefun = c("gf.ROE_ttm", "gf.ROE",
+  "gf.F_ROE"))
 }
 \arguments{
 \item{begT}{is strategy's begin date}

@@ -44,108 +44,103 @@
 #' chgBar <- 0.2
 #' bankport <- bank.rotation(begT,endT,chgBar)
 #' @export
-bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003){
+bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
+                             pbfun=c('gf.PB_lyr','gf.PB_mrq'),
+                             roefun=c('gf.ROE_ttm','gf.ROE','gf.F_ROE')){
+  pbfun <- match.arg(pbfun)
+  roefun <- match.arg(roefun)
 
-  #get TSF
-  begT <- trday.nearby(begT,by=-1)
   rebDates <- getRebDates(begT,endT,rebFreq = 'day')
   TS <- getTS(rebDates,indexID = 'ES33480000')
-  con <- db.local()
   qr <- paste("select ID 'stockID',ListedDate from SecuMain where ID in",brkQT(unique(TS$stockID)))
-  ipo <- dbGetQuery(con,qr)
-  dbDisconnect(con)
+  ipo <- queryAndClose.dbi(db.local(),qr)
   ipo$ListedDate <- intdate2r(ipo$ListedDate)
   TS <- left_join(TS,ipo,by='stockID')
   TS <- na.omit(TS)
   TS <- TS[TS$date>TS$ListedDate,c('date','stockID'),]
   TS <- rmSuspend(TS)
 
-  TSF <- gf.PB_mrq(TS)
-  tmp <- gf.F_ROE_new(TS)
+  TSF <- getTSF(TS,pbfun)
+  tmp <- getTSF(TS,roefun)
+  tmp <- tmp[,c('date','stockID','factorscore')]
+  if(substr(roefun,4,4)!='F'){
+    tmp$factorscore <- tmp$factorscore/100
+  }
   TSF <- left_join(TSF,tmp,by=c('date','stockID'))
-  colnames(TSF) <- c("date","stockID","PB_mrq_","F_ROE_1")
-  TSF$stockName <- stockID2name(TSF$stockID)
-  TSF <- TSF[,c("date","stockID","stockName","PB_mrq_","F_ROE_1")]
+  colnames(TSF) <- c("date","stockID","PB","ROE")
   TSF <- na.omit(TSF)
-  TSF$factorscore <- log(TSF$PB_mrq_*2,base=(1+TSF$F_ROE_1))
+  TSF$factorscore <- log(TSF$PB*2,base=(1+TSF$ROE))
   TSF <- dplyr::arrange(TSF,date,factorscore)
 
   #get bank
   dates <- unique(TSF$date)
-  bankPort <- data.frame()
-  for(i in 1:length(dates)){
-    if(i==1){
-      tmp <- TSF[TSF$date==dates[i],c('date','stockID')]
-      bankPort <- rbind(bankPort,tmp[1,])
-    }else{
-      oldstock <- dplyr::last(bankPort$stockID)
-      tradable <- trday.is(trday.nearby(dates[i],1),oldstock)
-
-      if(tradable==TRUE){
-        tmp <- TSF[TSF$date==dates[i],c('date','stockID')]
-        tmp <- left_join(tmp,TSF[,c("date","stockID","factorscore")],by=c("date","stockID"))
-        if(oldstock %in% tmp$stockID){
-          newscore <- tmp[1,'factorscore']
-          oldscore <- tmp[tmp$stockID==oldstock,'factorscore']*(1-chgBar)
-          if(newscore<oldscore){
-            bankPort <- rbind(bankPort,tmp[1,c("date","stockID")])
-            next
-          }
-
-        }
+  bankPort <- TSF[1,c('date','stockID')]
+  for(i in 2:length(dates)){
+    oldstock <- tail(bankPort$stockID,1)
+    tmp <- TSF[TSF$date==dates[i],c('date','stockID',"factorscore")]
+    if(oldstock %in% tmp$stockID){
+      newscore <- tmp[1,'factorscore']
+      oldscore <- tmp[tmp$stockID==oldstock,'factorscore']*(1-chgBar)
+      if(newscore<oldscore){
+        bankPort <- rbind(bankPort,tmp[1,c("date","stockID")])
+        next
       }
-      tmp <- data.frame(date=dates[i],stockID=oldstock)
-      bankPort <- rbind(bankPort,tmp)
     }
+    bankPort <- rbind(bankPort,data.frame(date=dates[i],stockID=oldstock))
   }
 
   #get bank daily return
-  tmp <- brkQT(substr(unique(bankPort$stockID),3,8))
-  qr <- paste("SELECT convert(varchar,TradingDay,112) 'date'
-              ,'EQ'+s.SecuCode 'stockID',OpenPrice 'open'
-              ,PrevClosePrice 'pre_close',ClosePrice 'close'
-              FROM QT_DailyQuote q,SecuMain s
-              where q.InnerCode=s.InnerCode and SecuCategory=1
-              and s.SecuCode in",tmp,
-              " and TradingDay>=",QT(min(bankPort$date)),
-              " and TradingDay<=",QT(max(bankPort$date)),
-              " order by TradingDay,s.SecuCode")
-  con <- db.jy()
-  re <- sqlQuery(con,qr,stringsAsFactors=F)
-  odbcClose(con)
-  re <- transform(re,date=intdate2r(date),
-                  pct=close/pre_close-1)
-  #remove trading cost
-  TSR <- left_join(bankPort,re[,c('date','stockID','open','close','pct')],by = c("date", "stockID"))
-  TSR$pct[1] <- 0
-  TSR$pct[2] <- TSR$close[2]/TSR$open[2]-1-fee
-  for(i in 3:nrow(TSR)){
+  qr <- paste("SELECT TradingDay 'date',ID 'stockID'
+              ,PrevClosePrice 'pre_close',OpenPrice 'open'
+              ,ClosePrice 'close',DailyReturn 'pct_chg'
+              FROM QT_DailyQuote
+              where ID in",brkQT(unique(bankPort$stockID)),
+              " and TradingDay>=",rdate2int(min(bankPort$date)),
+              " and TradingDay<=",rdate2int(max(bankPort$date)),
+              " order by TradingDay,ID")
+  re <- queryAndClose.odbc(db.quant(),qr,stringsAsFactors=F)
+  re <- transform(re,date=intdate2r(date))
+
+  TSR <- left_join(bankPort,re,by = c("date", "stockID"))
+
+  for(i in 1:nrow(TSR)){
+    if(i==1){
+      TSR$pct_chg[i] <- 0
+      next
+    }
+    if(i==2){
+      TSR$pct_chg[i] <- TSR$close[i]/TSR$open[i]-1-fee
+      next
+    }
+
     if(TSR$stockID[i]!=TSR$stockID[i-1]){
-      TSR$pct[i] <- re[re$stockID==TSR$stockID[i-1] & re$date==TSR$date[i],'pct']
+      TSR$pct_chg[i] <- re[re$stockID==TSR$stockID[i-1] & re$date==TSR$date[i],'pct_chg']
     }else if(TSR$stockID[i]==TSR$stockID[i-1] & TSR$stockID[i-1]!=TSR$stockID[i-2]){
       tmp.open <- re[re$stockID==TSR$stockID[i-2] & re$date==TSR$date[i],'open']
       tmp.close <- re[re$stockID==TSR$stockID[i-2] & re$date==TSR$date[i-1],'close']
       tmp.rtn <- tmp.open/tmp.close-1-fee
-      TSR$pct[i] <- tmp.rtn+TSR$close[i]/TSR$open[i]-1-fee
+      TSR$pct_chg[i] <- tmp.rtn+TSR$close[i]/TSR$open[i]-1-fee
     }
   }
-  TSR <- TSR[-1,]
 
   #get bench mark return
   bench <- getIndexQuote('EI801780',min(TSR$date),max(TSR$date),variables = c('pre_close','close'),datasrc = 'jy')
-  bench$pct_chg <- bench$close/bench$pre_close-1
-  bench <- bench[,c("date","pct_chg")]
-  colnames(bench) <- c('date','indexRtn')
+  bench$indexRtn <- bench$close/bench$pre_close-1
+  bench <- bench[,c("date","indexRtn")]
 
-  rtn <- left_join(bench,TSR[,c('date','pct')],by='date')
+  rtn <- left_join(bench,TSR[,c('date','pct_chg')],by='date')
   colnames(rtn) <- c("date","indexRtn","bankRtn")
   rtn <- na.omit(rtn)
+  rtn <- xts::xts(rtn[,-1],order.by = rtn[,1])
 
-  tmp <- bankPort[,c('date','stockID')]
-  tmp$mark <- c('hold')
-  TSF <- left_join(TSF,tmp,by=c('date','stockID'))
+  bankPort$mark <- 'hold'
+  TSF <- left_join(TSF,bankPort,by=c('date','stockID'))
+  TSF$stockName <- stockID2name(TSF$stockID)
+  TSF <- TSF[,c("date", "stockID",'stockName',"PB","ROE","factorscore",'mark')]
   return(list(TSF=TSF,rtn=rtn))
 }
+
+
 
 
 
