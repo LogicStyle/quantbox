@@ -1154,54 +1154,83 @@ db.ts <- function(){
 
 
 
-#' fundTE
+#' fund_exrtn_terr
 #'
-#' calculate fund's tracking error
+#' calculate fund's excess return and tracking error
 #' @param fundID is fund ID.
 #' @param begT is begin date.
 #' @param endT is end date, default value is \bold{today}.
 #' @param scale is number of periods in a year,default value is 250.
-#' @param digit is digit.
 #' @examples
-#' te <- fundTE(fundID='162411.OF',begT=as.Date('2013-06-28'))
-#' te <- fundTE(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
+#' te <- fund_exrtn_terr(fundID='162411.OF',begT=as.Date('2013-06-28'))
+#' te <- fund_exrtn_terr(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
 #' @export
-fundTE <- function(fundID,begT,endT=Sys.Date(),scale=250,digit=3){
+fund_exrtn_terr <- function(fundID,begT,endT=Sys.Date(),freq=NULL,scale=250){
   require(WindR)
   WindR::w.start(showmenu = F)
-  if(length(fundID)>1){
-    if(missing(begT)){
-      begT<-w.wss(fundID,'fund_setupdate')[[2]]
-      begT <- w.asDateTime(begT$FUND_SETUPDATE,asdate = T)
-    }
 
-    if(length(begT)==1){
-      begT <- rep(begT,length(fundID))
-    }
-    if(length(endT)==1){
-      endT <- rep(endT,length(fundID))
-    }
+  setupdate<-w.wss(fundID,'fund_setupdate')[[2]]
+  setupdate <- w.asDateTime(setupdate$FUND_SETUPDATE,asdate = T)
+
+  if(missing(begT)){
+    df <- data.frame(fundID=fundID,begT=setupdate,endT=endT)
+  }else{
+    df <- data.frame(fundID=fundID,begT=begT,endT=endT)
+    df[,'begT'] <- ifelse(df$begT<setupdate,setupdate,df$begT)
+    df$begT <- as.Date(df$begT,origin='1970-01-01')
+  }
+  result <- data.frame()
+
+  innerte <- function(tsobj,scale){
+    TrackingError <-  sqrt(sum(tsobj^2) / (length(tsobj) - 1)) * sqrt(scale)
+    return(TrackingError)
   }
 
-  df <- data.frame(fundID,begT,endT)
-  df$TE <- c(0)
-  for(i in 1:length(fundID)){
-    fundts <-w.wsd(fundID[i],"NAV_adj_return1",begT[i],endT[i],"Fill=Previous")[[2]]
-    tmp <- w.wss(fundID[i],'fund_benchindexcode')[[2]]
-    tmp <- tmp$FUND_BENCHINDEXCODE
-    benchts <-w.wsd(tmp,"pct_chg",begT[i],endT[i],"Fill=Previous")[[2]]
+  for(i in 1:nrow(df)){
+    fundts <-w.wsd(df$fundID[i],"NAV_adj_return1",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
+    tmp <- w.wss(df$fundID[i],'fund_benchindexcode')[[2]]
+    benchts <-w.wsd(tmp$FUND_BENCHINDEXCODE,"pct_chg",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
     allts <- merge(fundts,benchts,by='DATETIME')
     allts <- na.omit(allts)
     allts <- transform(allts,NAV_ADJ_RETURN1=NAV_ADJ_RETURN1/100,PCT_CHG=PCT_CHG/100)
     allts <- xts::xts(allts[,-1],order.by = allts[,1])
-    re <- round(PerformanceAnalytics::TrackingError(allts[,1],allts[,2],scale = scale),digits = digit)
-    df$TE[i] <- re
+
+
+    if(is.null(freq)){
+      rtn <- rtn.summary(allts)
+      result <- rbind(result,data.frame(fundID=df$fundID[i],
+                                        begT=df$begT[i],
+                                        endT=df$endT[i],
+                                        fundrtn=rtn[1,1],
+                                        benchrtn=rtn[1,2],
+                                        exrtn=rtn[1,1]-rtn[1,2],
+                                        te=innerte(allts[,1]-allts[,2],scale = scale)))
+
+    }else{
+      from <- unique(cut.Date2(zoo::index(allts),freq,lab.side="begin"))
+      to <- unique(cut.Date2(zoo::index(allts),freq,lab.side="end"))
+      rtn <- zoo::as.zoo(allts)
+      # ---- periods cumulative rtn
+      table.periods <- timeSeries::fapply(timeSeries::as.timeSeries(rtn),from,to,FUN=PerformanceAnalytics::Return.annualized)
+      table.periods <- as.data.frame(table.periods)
+      table.periods <- cbind(table.periods,exrtn=table.periods[,1]-table.periods[,2])
+
+
+      rtn <- rtn[,1]-rtn[,2]
+      te.periods <- timeSeries::fapply(timeSeries::as.timeSeries(rtn),from,to,FUN=innerte,scale=scale)
+      te.periods <- as.data.frame(te.periods)
+      table.periods <- cbind(table.periods,te.periods)
+      colnames(table.periods) <- c('fundrtn','benchrtn','exrtn','te')
+      result <- rbind(result,data.frame(fundID=df$fundID[i],
+                                        begT=from,
+                                        endT=to,
+                                        table.periods))
+
+    }
+
   }
-
-  return(df)
+  return(result)
 }
-
-
 
 
 
