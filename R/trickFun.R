@@ -269,7 +269,7 @@ getIV <- function(valtype=c('PE','PB'),caltype=c('median','mean'),
   valtype <- match.arg(valtype)
   caltype <- match.arg(caltype)
 
-  qr <- paste("select indexID,indexName,date,value from QT_IndexTiming
+  qr <- paste("select indexID,indexName,date,value from QT_IndexValuation
               where date>=",rdate2int(begT),
               " and date<=",rdate2int(endT),
               "and valtype=",QT(valtype)," and caltype=",QT(caltype))
