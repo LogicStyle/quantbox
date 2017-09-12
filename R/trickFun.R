@@ -146,14 +146,14 @@ bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
 
 # ===================== ~ index valuation  ====================
 
-#' update table QT_IndexTiming
+#' lcdb.update.QT_IndexValuation
 #'
 #'
 #' @author Andrew Dow
 #' @examples
-#' lcdb.update.QT_IndexTiming()
+#' lcdb.update.QT_IndexValuation()
 #' @export
-lcdb.update.QT_IndexTiming<- function(){
+lcdb.update.QT_IndexValuation<- function(){
 
   subfun <- function(indexDate){
     tmp <- brkQT(substr(indexDate$indexID,3,8))
