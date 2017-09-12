@@ -238,19 +238,19 @@ lcdb.update.QT_IndexValuation<- function(){
   }#subfun finished
 
   con <- db.local()
-  begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexTiming")
+  begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation")
   begT <- trday.nearby(intdate2r(begT$date),by=1)
   endT <- trday.nearby(Sys.Date(),by=-1)
   if(begT>endT){
     return('Done!')
   }else{
-    indexDate <- dbGetQuery(con,"select distinct indexID,indexName from QT_IndexTiming")
+    indexDate <- dbGetQuery(con,"select distinct indexID,indexName from QT_IndexValuation")
     indexDate$begT <- begT
     indexDate$endT <- endT
 
     re <- subfun(indexDate)
     re$date <- rdate2int(re$date)
-    dbWriteTable(con,'QT_IndexTiming',re,overwrite=F,append=T,row.names=FALSE)
+    dbWriteTable(con,'QT_IndexValuation',re,overwrite=F,append=T,row.names=FALSE)
     dbDisconnect(con)
     return('Done!')
   }
