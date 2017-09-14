@@ -472,18 +472,6 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 NULL
 
 
-gf.PE_ttm_raw <- function(TS){
-  funchar <- "StockPE3_V()"
-  re <- TS.getTech_ts(TS,funchar,varname="factorscore")
-  return(re)
-}
-
-gf.PB_mrq_raw <- function(TS){
-  funchar <- "StockPNA3_II()"
-  re <- TS.getTech_ts(TS,funchar,varname="factorscore")
-  return(re)
-}
-
 
 
 #' @rdname get_factor
@@ -615,10 +603,12 @@ gf.dividend <- function(TS,datasrc=c('jy','wind')){
 #'
 #' get stats of financial indicators from tinysoft.
 #' @param TS
-#' @param funchar see \link[QDataGet]{TS.getFin_rptTS}
+#' @param funchar see \link[QDataGet]{TS.getFin_by_rptTS}
 #' @param Nbin
 #' @param growth whether get the growing rate of financial indicators,default value is \code{TRUE}.
 #' @param stattype
+#' @importFrom lubridate %m+%
+#' @export
 #' @examples
 #' RebDates <- getRebDates(as.Date('2013-01-31'),as.Date('2017-05-31'),'month')
 #' TS <- getTS(RebDates,'EI000905')
@@ -705,11 +695,11 @@ TS.getFinStat_ts <- function(TS,funchar,varname = funchar,Nbin=lubridate::years(
   N <- max(TSFdata$id)
   TSFdata <- TSFdata %>% dplyr::group_by(date,stockID) %>% dplyr::filter(max(id) > N/2)
   if(stattype=='mean'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore))
+    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore,na.rm = TRUE))
   }else if(stattype=='sd'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=sd(factorscore))
+    TSF <- TSFdata %>%  dplyr::summarise(factorscore=sd(factorscore,na.rm = TRUE))
   }else if(stattype=='mean/sd'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore)/sd(factorscore))
+    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore,na.rm = TRUE)/sd(factorscore,na.rm = TRUE))
   }else if(stattype %in% c('slope','slope/sd')){
     tmp <- TSFdata %>% do(mod = lm(factorscore ~ id, data = .))
     tmp <- data.frame(tmp %>% broom::tidy(mod))

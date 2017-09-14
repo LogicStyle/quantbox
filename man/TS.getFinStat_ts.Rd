@@ -9,7 +9,7 @@ TS.getFinStat_ts(TS, funchar, varname = funchar,
   "slope", "sd", "mean/sd", "slope/sd"))
 }
 \arguments{
-\item{funchar}{see \link[QDataGet]{TS.getFin_rptTS}}
+\item{funchar}{see \link[QDataGet]{TS.getFin_by_rptTS}}
 
 \item{growth}{whether get the growing rate of financial indicators,default value is \code{TRUE}.}
 }
