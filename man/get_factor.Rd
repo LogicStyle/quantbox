@@ -5,6 +5,13 @@
 \alias{gf.smartQ}
 \alias{gf.doublePrice}
 \alias{gf.dividend}
+\alias{gf.BP_mrq}
+\alias{gf.EP_ttm}
+\alias{gf.ROA_ttm}
+\alias{gf.momentum}
+\alias{gf.lev_dtoa}
+\alias{gf.lev_ldtoop}
+\alias{gf.nl_size}
 \title{get factor}
 \usage{
 gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
@@ -12,6 +19,20 @@ gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 gf.doublePrice(TS, ROEType = c("ROE_ttm", "F_ROE", "ROE", "ROE_Q"))
 
 gf.dividend(TS, datasrc = c("jy", "wind"))
+
+gf.BP_mrq(TS)
+
+gf.EP_ttm(TS)
+
+gf.ROA_ttm(TS)
+
+gf.momentum(TS, Nlong = 250, Nshort = 20)
+
+gf.lev_dtoa(TS)
+
+gf.lev_ldtoop(TS)
+
+gf.nl_size(TS)
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

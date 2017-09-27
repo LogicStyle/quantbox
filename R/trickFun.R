@@ -60,8 +60,8 @@ bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
   TS <- TS[TS$date>TS$ListedDate,c('date','stockID'),]
   TS <- rmSuspend(TS)
 
-  TSF <- getTSF(TS,pbfun)
-  tmp <- getTSF(TS,roefun)
+  TSF <- getRawFactor(TS,pbfun)
+  tmp <- getRawFactor(TS,roefun)
   tmp <- tmp[,c('date','stockID','factorscore')]
   if(substr(roefun,4,4)!='F'){
     tmp$factorscore <- tmp$factorscore/100
