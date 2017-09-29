@@ -18,7 +18,7 @@ gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 
 gf.doublePrice(TS, ROEType = c("ROE_ttm", "F_ROE", "ROE", "ROE_Q"))
 
-gf.dividend(TS, datasrc = c("jy", "wind"))
+gf.dividend(TS, datasrc = c("ts", "jy", "wind"))
 
 gf.BP_mrq(TS)
 

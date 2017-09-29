@@ -560,7 +560,7 @@ gf.doublePrice <- function(TS,ROEType=c('ROE_ttm','F_ROE','ROE','ROE_Q')){
 
 #' @rdname get_factor
 #' @export
-gf.dividend <- function(TS,datasrc=c('jy','wind')){
+gf.dividend <- function(TS,datasrc=c('ts','jy','wind')){
   datasrc <- match.arg(datasrc)
   if(datasrc=='jy'){
     tmp <- brkQT(substr(unique(TS$stockID),3,8))
@@ -589,6 +589,16 @@ gf.dividend <- function(TS,datasrc=c('jy','wind')){
     re <- transform(re,stockID=stockID2stockID(stockID,'wind','local'),
                     factorscore=factorscore/100)
     TSF <- dplyr::left_join(TS,re,by=c('date','stockID'))
+  }else if(datasrc=='ts'){
+    dates <- unique(TS$date)
+    TSF <- data.frame()
+    for(i in 1:length(dates)){
+      stocks <- c(TS[TS$date==dates[i],'stockID'])
+      funchar <- paste("'factorscore',StockDividendYieldRatio(",rdate2ts(dates[i]),")",sep = '')
+      re <- ts.wss(stocks,funchar)
+      TSF <- rbind(TSF,data.frame(date=dates[i],re))
+    }
+    TSF <- dplyr::left_join(TS,TSF,by=c('date','stockID'))
   }
 
   return(TSF)
@@ -851,12 +861,21 @@ gf.group_size <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
       buildFactorList(factorFun="gf.free_float_sharesMV",
                       factorPar=list(),
                       factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.nl_size",
-                      factorPar=list(),
-                      factorDir=-1,
                       factorRefine=refinePar_default('old_fashion'))
     )
+    if(factorsrc=='local'){
+      factorIDs <- c('F000001')
+      FactorLists2 <- buildFactorLists_lcfs(factorIDs,
+                                            factorRefine = refinePar_default("old_fashion"))
+    }else{
+      FactorLists2 <- buildFactorLists(
+        buildFactorList(factorFun="gf.nl_size",
+                        factorPar=list(),
+                        factorDir=-1,
+                        factorRefine=refinePar_default('old_fashion'))
+      )
+    }
+    FactorLists <- c(FactorLists,FactorLists2)
     if(missing(wgts)){
       wgts <- c(0.45,0.35,0.2)
     }
@@ -881,24 +900,33 @@ gf.group_growth <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
       buildFactorList(factorFun="gf.NP_YOY",
                       factorPar=list(),
                       factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.G_EPS_Q",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.G_MLL_Q",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.G_OCF",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.G_scissor_Q",
-                      factorPar=list(),
-                      factorDir=1,
                       factorRefine=refinePar_default('old_fashion'))
     )
+    if(factorsrc=='local'){
+      factorIDs <- c('F000010','F000011','F000019','F000012')
+      FactorLists2 <- buildFactorLists_lcfs(factorIDs,
+                                           factorRefine = refinePar_default("old_fashion"))
+    }else{
+      FactorLists2 <- buildFactorLists(
+        buildFactorList(factorFun="gf.G_EPS_Q",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.G_MLL_Q",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.G_OCF",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.G_scissor_Q",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion'))
+      )
+    }
+    FactorLists <- c(FactorLists,FactorLists2)
     if(missing(wgts)){
       wgts <- c(0.3,0.3,0.15,0.1,0.15)
     }
@@ -919,21 +947,27 @@ gf.group_forecast <- function(TS,FactorLists, wgts,factorsrc=c('local','other'))
     }
     TSF <- getMultiFactor(TS,FactorLists,wgts)
   }else{
+    if(factorsrc=='local'){
+      factorIDs <- c('F000003','F000004','F000009')
+      FactorLists <- buildFactorLists_lcfs(factorIDs,
+                                           factorRefine = refinePar_default("old_fashion"))
+    }else{
+      FactorLists <- buildFactorLists(
+        buildFactorList(factorFun="gf.F_NP_chg",
+                        factorPar=list(span="w13",con_type="1,2"),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.F_target_rtn",
+                        factorPar=list(con_type="1,2"),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.F_rank_chg",
+                        factorPar=list(lag=60,con_type="1,2"),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion'))
+      )
+    }
 
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.F_NP_chg",
-                      factorPar=list(span="w13",con_type="1,2"),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.F_target_rtn",
-                      factorPar=list(con_type="1,2"),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.F_rank_chg",
-                      factorPar=list(lag=60,con_type="1,2"),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
 
     if(missing(wgts)){
       wgts <- c(0.2,0.5,0.3)
@@ -1005,16 +1039,24 @@ gf.group_earningyield <- function(TS,FactorLists, wgts,factorsrc=c('local','othe
     }
     TSF <- getMultiFactor(TS,FactorLists,wgts)
   }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.ROE_ttm",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.ROA_ttm",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion'))
+    if(factorsrc=='local'){
+      factorIDs <- c('F000007','F000020')
+      FactorLists <- buildFactorLists_lcfs(factorIDs,
+                                           factorRefine = refinePar_default("old_fashion"))
+    }else{
+      FactorLists <- buildFactorLists(
+        buildFactorList(factorFun="gf.ROE_ttm",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.ROA_ttm",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion'))
       )
+    }
+
+
     if(missing(wgts)){
       wgts <- c(0.7,0.3)
     }
@@ -1035,21 +1077,26 @@ gf.group_value <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
     }
     TSF <- getMultiFactor(TS,FactorLists,wgts)
   }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.PB_mrq",
-                      factorPar=list(),
-                      factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.EP_ttm",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.dividend",
-                      factorPar=list(datasrc='wind'),
-                      factorName="dividendyield",
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
+    if(factorsrc=='local'){
+
+    }else{
+      FactorLists <- buildFactorLists(
+        buildFactorList(factorFun="gf.PB_mrq",
+                        factorPar=list(),
+                        factorDir=-1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.EP_ttm",
+                        factorPar=list(),
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion')),
+        buildFactorList(factorFun="gf.dividend",
+                        factorPar=list(),
+                        factorName="dividendyield",
+                        factorDir=1,
+                        factorRefine=refinePar_default('old_fashion'))
+      )
+    }
+
     if(missing(wgts)){
       wgts <- c(0.6,0.2,0.2)
     }
@@ -1070,12 +1117,19 @@ gf.group_quality <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
     }
     TSF <- getMultiFactor(TS,FactorLists,wgts)
   }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.lev_dtoa",
-                      factorPar=list(),
-                      factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
+    if(factorsrc=='local'){
+      factorIDs <- c('F000021')
+      FactorLists <- buildFactorLists_lcfs(factorIDs,
+                                           factorRefine = refinePar_default("old_fashion"))
+    }else{
+      FactorLists <- buildFactorLists(
+        buildFactorList(factorFun="gf.lev_dtoa",
+                        factorPar=list(),
+                        factorDir=-1,
+                        factorRefine=refinePar_default('old_fashion'))
+      )
+    }
+
     if(missing(wgts)){
       wgts <- c(1)
     }
@@ -1095,18 +1149,14 @@ gf.group_other <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
     }
     TSF <- getMultiFactor(TS,FactorLists,wgts)
   }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.momentum",
-                      factorPar=list(),
-                      factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
     if(factorsrc=='local'){
-      factorIDs <- c('F000017','F000015')
-      FactorLists2 <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
+
     }else{
-      FactorLists2 <- buildFactorLists(
+      FactorLists <- buildFactorLists(
+        buildFactorList(factorFun="gf.momentum",
+                        factorPar=list(),
+                        factorDir=-1,
+                        factorRefine=refinePar_default('old_fashion')),
         buildFactorList(factorFun="gf.IVR",
                         factorPar=list(),
                         factorDir=-1,
@@ -1117,7 +1167,6 @@ gf.group_other <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
                         factorRefine=refinePar_default('old_fashion'))
       )
     }
-    FactorLists <- c(FactorLists,FactorLists2)
     if(missing(wgts)){
       wgts <- c(0.2,0.4,0.4)
     }
