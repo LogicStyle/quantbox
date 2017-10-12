@@ -213,7 +213,7 @@ lcdb.build.QT_IndexValuation<- function(){
       tmp <- TSF[,c('date','stockID','pettm')]
       tmp <- tmp[tmp$pettm>0 & tmp$pettm<1000,]
       colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
       tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
       tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PE',caltype='mean')
       indexvalue <- rbind(indexvalue,tmp)
@@ -227,7 +227,7 @@ lcdb.build.QT_IndexValuation<- function(){
       tmp <- TSF[,c('date','stockID','pbmrq')]
       tmp <- tmp[tmp$pbmrq>0,]
       colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
       tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
       tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='mean')
       indexvalue <- rbind(indexvalue,tmp)
@@ -325,7 +325,7 @@ lcdb.addindex.QT_IndexValuation<- function(indexset){
     tmp <- TSF[,c('date','stockID','pettm')]
     tmp <- tmp[tmp$pettm>0 & tmp$pettm<1000,]
     colnames(tmp) <- c('date','stockID','factorscore')
-    tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+    tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
     tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
     tmp <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,tmp,valtype='PE',caltype='mean')
     indexvalue <- rbind(indexvalue,tmp)
@@ -339,7 +339,7 @@ lcdb.addindex.QT_IndexValuation<- function(indexset){
     tmp <- TSF[,c('date','stockID','pbmrq')]
     tmp <- tmp[tmp$pbmrq>0,]
     colnames(tmp) <- c('date','stockID','factorscore')
-    tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+    tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
     tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
     tmp <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,tmp,valtype='PB',caltype='mean')
     indexvalue <- rbind(indexvalue,tmp)
@@ -435,7 +435,7 @@ lcdb.update.QT_IndexValuation<- function(){
       tmp <- TSF[,c('date','stockID','pettm')]
       tmp <- dplyr::filter(tmp,pettm>0,pettm<1000)
       colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
       tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
       tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PE',caltype='mean')
       indexvalue <- rbind(indexvalue,tmp)
@@ -449,7 +449,7 @@ lcdb.update.QT_IndexValuation<- function(){
       tmp <- TSF[,c('date','stockID','pbmrq')]
       tmp <- tmp[tmp$pbmrq>0,]
       colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- RFactorModel:::factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
+      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
       tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
       tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='mean')
       indexvalue <- rbind(indexvalue,tmp)

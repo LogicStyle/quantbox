@@ -2,34 +2,34 @@
 % Please edit documentation in R/factorModelPart.R
 \name{group_factor}
 \alias{group_factor}
-\alias{gf.group_liquidity}
-\alias{gf.group_size}
-\alias{gf.group_growth}
-\alias{gf.group_forecast}
-\alias{gf.group_trading}
-\alias{gf.group_earningyield}
-\alias{gf.group_value}
-\alias{gf.group_quality}
-\alias{gf.group_other}
+\alias{gf.SIZE}
+\alias{gf.GROWTH}
+\alias{gf.FORECAST}
+\alias{gf.TRADING}
+\alias{gf.EARNINGYIELD}
+\alias{gf.VALUE}
+\alias{gf.QUALITY}
+\alias{gf.OTHER}
+\alias{gf.LIQUIDITY}
 \title{group factor}
 \usage{
-gf.group_liquidity(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.SIZE(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_size(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.GROWTH(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_growth(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.FORECAST(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_forecast(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.TRADING(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_trading(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.EARNINGYIELD(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_earningyield(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.VALUE(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_value(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.QUALITY(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_quality(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.OTHER(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 
-gf.group_other(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.LIQUIDITY(TS, FactorLists, wgts, factorsrc = c("local", "other"))
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

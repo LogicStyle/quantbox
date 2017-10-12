@@ -12,6 +12,7 @@
 \alias{gf.lev_dtoa}
 \alias{gf.lev_ldtoop}
 \alias{gf.nl_size}
+\alias{gf.pio_f_score}
 \title{get factor}
 \usage{
 gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
@@ -33,6 +34,8 @@ gf.lev_dtoa(TS)
 gf.lev_ldtoop(TS)
 
 gf.nl_size(TS)
+
+gf.pio_f_score(TS)
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}
@@ -49,4 +52,7 @@ TS <- getTS(RebDates,'EI000300')
 TSF <- gf.smartQ(TS)
 TSF <- gf.dividend(TS)
 TSF <- gf.doublePrice(TS)
+}
+\author{
+han.qian
 }
