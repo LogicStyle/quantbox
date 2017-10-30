@@ -10,26 +10,23 @@
 \alias{gf.VALUE}
 \alias{gf.QUALITY}
 \alias{gf.OTHER}
-\alias{gf.LIQUIDITY}
 \title{group factor}
 \usage{
-gf.SIZE(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.SIZE(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.GROWTH(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.GROWTH(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.FORECAST(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.FORECAST(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.TRADING(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.TRADING(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.EARNINGYIELD(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.EARNINGYIELD(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.VALUE(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.VALUE(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.QUALITY(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.QUALITY(TS, refinePar = refinePar_default("old_fashion"))
 
-gf.OTHER(TS, FactorLists, wgts, factorsrc = c("local", "other"))
-
-gf.LIQUIDITY(TS, FactorLists, wgts, factorsrc = c("local", "other"))
+gf.OTHER(TS, refinePar = refinePar_default("old_fashion"))
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

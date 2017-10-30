@@ -4,7 +4,7 @@
 \alias{get_factor}
 \alias{gf.smartQ}
 \alias{gf.doublePrice}
-\alias{gf.dividend}
+\alias{gf.dividendyield}
 \alias{gf.BP_mrq}
 \alias{gf.EP_ttm}
 \alias{gf.ROA_ttm}
@@ -19,7 +19,7 @@ gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 
 gf.doublePrice(TS, ROEType = c("ROE_ttm", "F_ROE", "ROE", "ROE_Q"))
 
-gf.dividend(TS, datasrc = c("ts", "jy", "wind"))
+gf.dividendyield(TS, datasrc = c("ts", "jy", "wind"))
 
 gf.BP_mrq(TS)
 
@@ -50,7 +50,7 @@ get factor
 RebDates <- getRebDates(as.Date('2011-03-17'),as.Date('2012-04-17'),'month')
 TS <- getTS(RebDates,'EI000300')
 TSF <- gf.smartQ(TS)
-TSF <- gf.dividend(TS)
+TSF <- gf.dividendyield(TS)
 TSF <- gf.doublePrice(TS)
 }
 \author{

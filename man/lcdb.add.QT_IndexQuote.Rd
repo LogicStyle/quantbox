@@ -9,3 +9,6 @@ lcdb.add.QT_IndexQuote(indexID)
 \description{
 lcdb.add.QT_IndexQuote
 }
+\examples{
+lcdb.add.QT_IndexQuote("EI000852")
+}

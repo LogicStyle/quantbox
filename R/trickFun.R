@@ -58,7 +58,7 @@ bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
   TS <- left_join(TS,ipo,by='stockID')
   TS <- na.omit(TS)
   TS <- TS[TS$date>TS$ListedDate,c('date','stockID'),]
-  TS <- rmSuspend(TS)
+  TS <- rm_suspend(TS,0)
 
   TSF <- getRawFactor(TS,pbfun)
   tmp <- getRawFactor(TS,roefun)
@@ -415,7 +415,6 @@ lcdb.update.QT_IndexValuation<- function(){
       TS$date <- intdate2r(TS$date)
       if(i==1){
         tmp <- getRebDates(min(indexDate$begT),max(indexDate$endT),'day')
-        add.index.lcdb('EI801003')
         tmp <- getTS(tmp,indexID = 'EI801003')
         alldata <- gf.PE_ttm(tmp,fillna = FALSE)
         alldata <- dplyr::rename(alldata,pettm=factorscore)

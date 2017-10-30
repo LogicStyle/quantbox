@@ -50,19 +50,23 @@ table.factor.summary <- function(TSFR,N=10,fee=0.001){
 #' lcdb.add.QT_IndexQuote
 #'
 #' @export
-#' @example
+#' @examples
 #' lcdb.add.QT_IndexQuote("EI000852")
 lcdb.add.QT_IndexQuote <- function(indexID){
+  con <- db.local()
+  begT <- dbGetQuery(con,"select min(TradingDay) from QT_IndexQuote")[[1]]
+  begT <- intdate2r(begT)
+  endT <- dbGetQuery(con,"select max(TradingDay) from QT_IndexQuote")[[1]]
+  endT <- intdate2r(endT)
   qr <- paste("SELECT q.InnerCode,convert(VARCHAR,TradingDay,112) 'TradingDay'
               ,PrevClosePrice,OpenPrice,HighPrice,LowPrice,ClosePrice
               ,TurnoverVolume,TurnoverValue,TurnoverDeals,ChangePCT
               ,NegotiableMV,q.XGRQ 'UpdateTime',ChangePCT/100 'DailyReturn',
               'EI'+s.SecuCode 'ID'
               FROM QT_IndexQuote q,SecuMain s
-              WHERE q.InnerCode=s.InnerCode and s.SecuCode=",QT(substr(indexID,3,8)),sep='')
+              WHERE q.InnerCode=s.InnerCode and s.SecuCode=",QT(substr(indexID,3,8)),
+              " and TradingDay>=",QT(begT)," and TradingDay<=",QT(endT))
   re <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
-
-  con <- db.local()
   dbGetQuery(con,paste("delete from QT_IndexQuote where ID=",QT(indexID),sep=''))
   dbWriteTable(con,"QT_IndexQuote",re,overwrite=FALSE,append=TRUE,row.names=FALSE)
   dbDisconnect(con)
@@ -215,7 +219,7 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 #' RebDates <- getRebDates(as.Date('2011-03-17'),as.Date('2012-04-17'),'month')
 #' TS <- getTS(RebDates,'EI000300')
 #' TSF <- gf.smartQ(TS)
-#' TSF <- gf.dividend(TS)
+#' TSF <- gf.dividendyield(TS)
 #' TSF <- gf.doublePrice(TS)
 NULL
 
@@ -307,7 +311,7 @@ gf.doublePrice <- function(TS,ROEType=c('ROE_ttm','F_ROE','ROE','ROE_Q')){
 
 #' @rdname get_factor
 #' @export
-gf.dividend <- function(TS,datasrc=c('ts','jy','wind')){
+gf.dividendyield <- function(TS,datasrc=c('ts','jy','wind')){
   datasrc <- match.arg(datasrc)
   if(datasrc=='jy'){
     tmp <- brkQT(substr(unique(TS$stockID),3,8))
@@ -625,382 +629,223 @@ gf.pio_f_score <- function(TS){
 #'
 NULL
 
-
-
-#' @rdname group_factor
-#' @export
-gf.SIZE <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.ln_mkt_cap",
-                      factorPar=list(),
-                      factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion')),
-      buildFactorList(factorFun="gf.free_float_sharesMV",
-                      factorPar=list(),
-                      factorDir=-1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
-    if(factorsrc=='local'){
-      factorIDs <- c('F000001')
-      FactorLists2 <- buildFactorLists_lcfs(factorIDs,
-                                            factorRefine = refinePar_default("old_fashion"))
+group_factor_subfun <- function(TS,factorType,refinePar){
+  group_factor <- CT_GroupFactorLists()
+  group_factor <- group_factor[group_factor$factorType==factorType,c("factorName","factorFun","factorPar","factorDir","wgt")]
+  local_factor <- CT_FactorLists()
+  local_factor <- local_factor[,c("factorID","factorName","factorPar")]
+  local_factor <- rename(local_factor,factorPar2=factorPar)
+  group_factor <- dplyr::left_join(group_factor,local_factor,by="factorName")
+  for(i in 1:nrow(group_factor)){
+    if(!is.na(group_factor$factorID[i]) && group_factor$factorPar[i]==group_factor$factorPar2[i]){
+      FactorLists_ <- buildFactorLists_lcfs(group_factor$factorID[i],factorRefine = refinePar)
     }else{
-      FactorLists2 <- buildFactorLists(
-        buildFactorList(factorFun="gf.nl_size",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-    FactorLists <- c(FactorLists,FactorLists2)
-    if(missing(wgts)){
-      wgts <- c(0.45,0.35,0.2)
-    }
+      if(group_factor$factorPar[i]==""){
+        FactorLists_ <- buildFactorLists(
+          buildFactorList(factorFun=group_factor$factorFun[i],
+                          factorPar=list(),
+                          factorDir=group_factor$factorDir[i],
+                          factorName = group_factor$factorName[i],
+                          factorRefine=refinePar))
+      }else{
+        FactorLists_ <- buildFactorLists(
+          buildFactorList(factorFun=group_factor$factorFun[i],
+                          factorPar=group_factor$factorPar[i],
+                          factorDir=group_factor$factorDir[i],
+                          factorName = group_factor$factorName[i],
+                          factorRefine=refinePar))
+      }
 
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.GROWTH <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
     }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.NP_YOY",
-                      factorPar=list(),
-                      factorDir=1,
-                      factorRefine=refinePar_default('old_fashion'))
-    )
-    if(factorsrc=='local'){
-      factorIDs <- c('F000010','F000011','F000019','F000012')
-      FactorLists2 <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
+    if(i==1){
+      FactorLists <- FactorLists_
     }else{
-      FactorLists2 <- buildFactorLists(
-        buildFactorList(factorFun="gf.G_EPS_Q",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.G_MLL_Q",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.G_OCF",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.G_scissor_Q",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-    FactorLists <- c(FactorLists,FactorLists2)
-    if(missing(wgts)){
-      wgts <- c(0.3,0.3,0.15,0.1,0.15)
+      FactorLists <- c(FactorLists,FactorLists_)
     }
 
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
   }
-  return(TSF[,c("date","stockID","factorscore")])
-}
 
-#' @rdname group_factor
-#' @export
-gf.FORECAST <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000003','F000004','F000009')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.F_NP_chg",
-                        factorPar=list(span="w13",con_type="1,2"),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.F_target_rtn",
-                        factorPar=list(con_type="1,2"),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.F_rank_chg",
-                        factorPar=list(lag=60,con_type="1,2"),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-
-
-    if(missing(wgts)){
-      wgts <- c(0.2,0.5,0.3)
-    }
-
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.TRADING <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000013','F000008','F000018','F000014','F000016')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                             factorRefine = refinePar_default("old_fashion"))
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.liquidity",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.pct_chg_per",
-                        factorPar=list(N=60),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.ILLIQ",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.volatility",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.beta",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-
-
-    if(missing(wgts)){
-      wgts <- c(0.2,0.3,0.3,0.1,0.1)
-    }
-
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.EARNINGYIELD <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000007','F000020')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.ROE_ttm",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.ROA_ttm",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-
-
-    if(missing(wgts)){
-      wgts <- c(0.7,0.3)
-    }
-
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.VALUE <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000006','F000005','F000023')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
-
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.PB_mrq",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.EP_ttm",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.dividend",
-                        factorPar=list(),
-                        factorName="dividendyield",
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-
-    if(missing(wgts)){
-      wgts <- c(0.6,0.2,0.2)
-    }
-
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.QUALITY <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000021')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.pio_f_score",
-                        factorPar=list(),
-                        factorDir=1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-
-    if(missing(wgts)){
-      wgts <- c(1)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
-  return(TSF[,c("date","stockID","factorscore")])
-}
-
-#' @rdname group_factor
-#' @export
-gf.OTHER <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    if(factorsrc=='local'){
-      factorIDs <- c('F000022','F000017','F000015')
-      FactorLists <- buildFactorLists_lcfs(factorIDs,
-                                           factorRefine = refinePar_default("old_fashion"))
-
-    }else{
-      FactorLists <- buildFactorLists(
-        buildFactorList(factorFun="gf.momentum",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.IVR",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion')),
-        buildFactorList(factorFun="gf.disposition",
-                        factorPar=list(),
-                        factorDir=-1,
-                        factorRefine=refinePar_default('old_fashion'))
-      )
-    }
-    if(missing(wgts)){
-      wgts <- c(0.2,0.4,0.4)
-    }
-
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }
+  TSF <- getMultiFactor(TS,FactorLists,group_factor$wgt)
   return(TSF[,c("date","stockID","factorscore")])
 }
 
 
 #' @rdname group_factor
 #' @export
-gf.LIQUIDITY <- function(TS,FactorLists, wgts,factorsrc=c('local','other')){
-  factorsrc <- match.arg(factorsrc)
-  if(!missing(FactorLists)){
-    if(missing(wgts)){
-      N <- length(FactorLists)
-      wgts <- rep(1/N,N)
-    }
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
-  }else{
-    FactorLists <- buildFactorLists(
-      buildFactorList(factorFun="gf.liquidity",
-                      factorPar=list(nwin=22),
-                      factorName="STOM",
-                      factorDir=-1),
-      buildFactorList(factorFun="gf.liquidity",
-                      factorPar=list(nwin=66),
-                      factorName="STOQ",
-                      factorDir=-1),
-      buildFactorList(factorFun="gf.liquidity",
-                      factorPar=list(nwin=250),
-                      factorName="STOA",
-                      factorDir=-1)
-    )
-    if(missing(wgts)){
-      wgts <- c(0.5,0.3,0.2)
-    }
+gf.SIZE <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,factorType="SIZE",refinePar)
+}
 
-    TSF <- getMultiFactor(TS,FactorLists,wgts)
+
+#' @rdname group_factor
+#' @export
+gf.GROWTH <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"GROWTH",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.FORECAST <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"FORECAST",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.TRADING <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"TRADING",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.EARNINGYIELD <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"EARNINGYIELD",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.VALUE <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"VALUE",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.QUALITY <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"QUALITY",refinePar)
+}
+
+#' @rdname group_factor
+#' @export
+gf.OTHER <- function(TS,refinePar=refinePar_default('old_fashion')){
+  re <- group_factor_subfun(TS,"OTHER",refinePar)
+}
+
+
+
+gf.liquidityold <- function(TS,nwin=22){
+  check.TS(TS)
+  begT <- trday.nearby(min(TS$date),-nwin)
+  endT <- max(TS$date)
+
+  conn <- db.local()
+  qr <- paste("select t.TradingDay ,t.ID 'stockID',t.TurnoverVolume/10000 'TurnoverVolume',t.NonRestrictedShares
+              from QT_DailyQuote2 t where ID in",brkQT(unique(TS$stockID)),
+              " and t.TradingDay>=",rdate2int(begT),
+              " and t.TradingDay<",rdate2int(endT))
+  rawdata <- RSQLite::dbGetQuery(conn,qr)
+  RSQLite::dbDisconnect(conn)
+  rawdata <- dplyr::filter(rawdata,TurnoverVolume>=0,NonRestrictedShares>0)
+  rawdata <- transform(rawdata,TradingDay=intdate2r(TradingDay),
+                       TurnoverRate=TurnoverVolume/NonRestrictedShares)
+  rawdata <- rawdata[,c("TradingDay","stockID","TurnoverRate")]
+  re <- expandTS2TSF(TS,nwin,rawdata)
+
+  tmp.TSF <- re %>% dplyr::group_by(date, stockID) %>%
+    dplyr::summarise(factorscore=sum(TurnoverRate,na.rm = T)) %>% dplyr::ungroup()
+  tmp.TSF <- dplyr::filter(tmp.TSF,factorscore>0)
+  tmp.TSF <- transform(tmp.TSF,factorscore=log(factorscore))
+
+  TSF <- dplyr::left_join(TS,tmp.TSF,by=c('date','stockID'))
+  return(TSF)
+}
+
+# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
+# ===================== other  ===========================
+# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
+
+
+
+#' CT_GroupFactorLists
+#'
+#' @export
+#' @examples
+#' CT_GroupFactorLists()
+CT_GroupFactorLists <- function(){
+  con <- db.local()
+  re <- dbReadTable(con,"CT_GroupFactorLists")
+  dbDisconnect(con)
+  return(re)
+}
+
+#' mTSF_refine
+#'
+#' @export
+mTSF_refine <- function(mTSF,refinePar=refinePar_default(type ="old_fashion")){
+  factorNames <- guess_factorNames(mTSF,silence = TRUE)
+  for(i in 1:length(factorNames)){
+    TSF_ <- mTSF[,c('date','stockID',factorNames[i])]
+    colnames(TSF_) <- c('date','stockID','factorscore')
+    TSF_ <- factor_refine(TSF_,refinePar)
+    if(i==1){
+      mTSF_ <- TSF_
+    }else{
+      mTSF_ <- left_join(mTSF_,TSF_,by=c('date','stockID'))
+    }
   }
-  return(TSF[,c("date","stockID","factorscore")])
+  colnames(mTSF_) <- colnames(mTSF)
+  return(mTSF_)
+}
 
+#' mTSF2groupf
+#'
+#' @export
+mTSF2groupf <- function(mTSF,refinePar=refinePar_default(type ="old_fashion"),keep_single_factors = FALSE){
+  mTSF_ <- mTSF_refine(mTSF,refinePar)
+  fgroupconst <- CT_GroupFactorLists()
+  groupNames <- unique(fgroupconst$factorType)
+
+  for(i in 1:length(groupNames)){
+    fgroupconst_ <- fgroupconst[fgroupconst$factorType==groupNames[i],c('factorName','wgt')]
+    gTSF_ <- MultiFactor2CombiFactor(mTSF_[,c('date','stockID',fgroupconst_$factorName)],wgts =fgroupconst_$wgt,keep_single_factors = FALSE)
+    if(i==1){
+      gTSF <- gTSF_
+    }else{
+      gTSF <- left_join(gTSF,gTSF_,by=c('date','stockID'))
+    }
+  }
+  colnames(gTSF) <- c('date','stockID',groupNames)
+  return(gTSF)
+}
+
+
+
+#' factorlists recommend
+#'
+#' @param indexID is index ID.
+#' @export
+#' @examples
+#' ##################get the recommended factorLists of last 12 months##########
+#' begT <- Sys.Date()-lubridate::years(1)
+#' endT <- Sys.Date()-1
+#' indexID <- 'EI000905'
+#' FactorLists <- reg.factorlists_recommend(indexID,begT,endT)
+#' ##################get the recommended factorLists of last 4 weeks##########
+#' begT <- Sys.Date()-months(1)
+#' endT <- Sys.Date()-1
+#' indexID <- 'EI000985'
+#' FactorLists <- reg.factorlists_recommend(indexID,begT,endT,rebFreq = "week")
+reg.factorlists_recommend <- function(indexID,begT,endT,rebFreq = "month",rsqBar=1,forder){
+  RebDates <- getRebDates(begT,endT,rebFreq)
+  TS <- getTS(RebDates,indexID)
+  FactorLists <- buildFactorLists(
+    buildFactorList(factorFun="gf.SIZE"),
+    buildFactorList(factorFun="gf.GROWTH"),
+    buildFactorList(factorFun="gf.FORECAST"),
+    buildFactorList(factorFun="gf.TRADING"),
+    buildFactorList(factorFun="gf.EARNINGYIELD"),
+    buildFactorList(factorFun="gf.VALUE"),
+    buildFactorList(factorFun="gf.QUALITY"),
+    buildFactorList(factorFun="gf.OTHER"))
+  TSF <- getMultiFactor(TS,FactorLists)
+  TSFR <- na.omit(getTSR(TSF))
+
+  #factor select
+  re <- reg.factor_select(TSFR,sectorAttr = NULL,forder)
+  result <- re$result
+  result <- result[c(TRUE,result$rsqPct[-1]>rsqBar),]
+  TSFR <- TSFR[,c("date","date_end","stockID",result$fname,"periodrtn")]
+  FactorLists <- FactorLists[sapply(FactorLists,function(x) x$factorName %in% result$fname)]
+  re <- list(FactorLists=FactorLists,result=result,TSFR=TSFR)
+  return(re)
 }
 
 
