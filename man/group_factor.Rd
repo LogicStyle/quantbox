@@ -4,29 +4,23 @@
 \alias{group_factor}
 \alias{gf.SIZE}
 \alias{gf.GROWTH}
-\alias{gf.FORECAST}
 \alias{gf.TRADING}
 \alias{gf.EARNINGYIELD}
 \alias{gf.VALUE}
-\alias{gf.QUALITY}
 \alias{gf.OTHER}
 \title{group factor}
 \usage{
-gf.SIZE(TS, refinePar = refinePar_default("old_fashion"))
+gf.SIZE(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 
-gf.GROWTH(TS, refinePar = refinePar_default("old_fashion"))
+gf.GROWTH(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 
-gf.FORECAST(TS, refinePar = refinePar_default("old_fashion"))
+gf.TRADING(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 
-gf.TRADING(TS, refinePar = refinePar_default("old_fashion"))
+gf.EARNINGYIELD(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 
-gf.EARNINGYIELD(TS, refinePar = refinePar_default("old_fashion"))
+gf.VALUE(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 
-gf.VALUE(TS, refinePar = refinePar_default("old_fashion"))
-
-gf.QUALITY(TS, refinePar = refinePar_default("old_fashion"))
-
-gf.OTHER(TS, refinePar = refinePar_default("old_fashion"))
+gf.OTHER(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

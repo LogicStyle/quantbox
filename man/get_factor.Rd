@@ -7,6 +7,7 @@
 \alias{gf.dividendyield}
 \alias{gf.BP_mrq}
 \alias{gf.EP_ttm}
+\alias{gf.CFP_ttm}
 \alias{gf.ROA_ttm}
 \alias{gf.momentum}
 \alias{gf.lev_dtoa}
@@ -24,6 +25,8 @@ gf.dividendyield(TS, datasrc = c("ts", "jy", "wind"))
 gf.BP_mrq(TS)
 
 gf.EP_ttm(TS)
+
+gf.CFP_ttm(TS)
 
 gf.ROA_ttm(TS)
 

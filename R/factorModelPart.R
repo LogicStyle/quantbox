@@ -101,7 +101,7 @@ addwgt2port_amtao <- function(port,wgtType=c('fs','fssqrt','ffsMV'),wgtmax=NULL,
   }else{
     port <- gf.free_float_sharesMV(port)
     port <- plyr::ddply(port,"date",transform,wgt=factorscore/sum(factorscore,na.rm=TRUE))
-    port$factorscore <- NULL
+    port <- transform(port,factorscore=NULL,wgt=ifelse(is.na(wgt),0,wgt))
   }
 
 
@@ -357,127 +357,6 @@ gf.dividendyield <- function(TS,datasrc=c('ts','jy','wind')){
 
 
 
-#' TS.getFinStat_ts
-#'
-#' get stats of financial indicators from tinysoft.
-#' @param TS
-#' @param funchar see \link[QDataGet]{TS.getFin_by_rptTS}
-#' @param Nbin
-#' @param growth whether get the growing rate of financial indicators,default value is \code{TRUE}.
-#' @param stattype
-#' @importFrom lubridate %m+%
-#' @export
-#' @examples
-#' RebDates <- getRebDates(as.Date('2013-01-31'),as.Date('2017-05-31'),'month')
-#' TS <- getTS(RebDates,'EI000905')
-#' funchar <- 'LastQuarterData(RDate,46078,0)'
-#' varname <- 'np'
-#' TSF <- TS.getFinStat_ts(TS,funchar,varname,growth=TRUE)
-#' funchar <- 'LastQuarterData(RDate,9900000,0)'
-#' varname <- 'eps'
-#' TSF <- TS.getFinStat_ts(TS,funchar,varname)
-TS.getFinStat_ts <- function(TS,funchar,varname = funchar,Nbin=lubridate::years(-3),
-                             growth=FALSE,stattype=c('mean','slope','sd','mean/sd','slope/sd')){
-  stattype <- match.arg(stattype)
-
-  getrptDate <- function(begT,endT,type=c('between','forward','backward')){
-    type <- match.arg(type)
-
-    tmp <- seq(begT,endT,by='day')
-    if(type=='forward'){
-      tmp <- lubridate::floor_date(tmp, "quarter")-lubridate::days(1)
-    }else if(type=='backward'){
-      tmp <- lubridate::ceiling_date(tmp, "quarter")-lubridate::days(1)
-    }else{
-      tmp <- c(lubridate::floor_date(tmp, "quarter")-lubridate::days(1),
-               lubridate::ceiling_date(tmp, "quarter")-lubridate::days(1))
-
-    }
-
-    rptDate <- sort(unique(tmp))
-    if(type=='between'){
-      rptDate <- rptDate[rptDate>=begT]
-      rptDate <- rptDate[rptDate<=endT]
-    }
-    return(rptDate)
-  }
-
-
-  #get report date
-  begT <- trday.offset(min(TS$date),Nbin)
-  if(growth){
-    begT <- trday.offset(begT,lubridate::years(-1))
-  }
-  endT <- max(TS$date)
-  rptDate <- getrptDate(begT,endT,type = 'forward')
-
-  rptTS <- expand.grid(rptDate = rptDate, stockID = unique(TS$stockID),
-                       KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-  rptTS <- dplyr::arrange(rptTS,rptDate,stockID)
-
-  #remove report dates before IPO
-  tmp <- data.frame(date=max(TS$date),stockID = unique(TS$stockID),stringsAsFactors=FALSE)
-  tmp <- TS.getTech_ts(tmp, funchar="Firstday()",varname='IPODay')
-  tmp <- transform(tmp,date=NULL,IPODay=tsdate2r(IPODay))
-  rptTS <- dplyr::left_join(rptTS,tmp,by='stockID')
-  rptTS <- rptTS[rptTS$rptDate>rptTS$IPODay,c('rptDate','stockID')]
-
-  funchar <- paste("'",varname,"',",funchar,sep = '')
-  TSFdata <- rptTS.getFin_ts(rptTS,funchar)
-  colnames(TSFdata) <- c("rptDate","stockID","factorscore")
-
-  if(growth){
-    TSFdata <- TSFdata %>% dplyr::group_by(stockID) %>%
-      dplyr::mutate(growth =(factorscore - dplyr::lag(factorscore, 4))/abs(dplyr::lag(factorscore, 4)))
-    TSFdata <- na.omit(TSFdata)
-    TSFdata <- TSFdata[!is.infinite(TSFdata$growth),c("rptDate","stockID","growth")]
-    colnames(TSFdata) <- c("rptDate","stockID","factorscore")
-  }
-
-
-  TSnew <- getrptDate_newest(TS)
-  TSnew <- na.omit(TSnew)
-  TSnew <- dplyr::rename(TSnew,rptDateEnd=rptDate)
-  TSnew$rptDateBeg <- TSnew$rptDateEnd %m+% Nbin
-  tmp <- dplyr::distinct(TSnew,rptDateBeg,rptDateEnd)
-  tmp <- tmp %>% dplyr::rowwise() %>%
-    dplyr::do(rptDateBeg=.$rptDateBeg,rptDateEnd=.$rptDateEnd,rptDate = getrptDate(.$rptDateBeg, .$rptDateEnd,type = 'between')) %>%
-    dplyr::do(data.frame(rptDateBeg=.$rptDateBeg,rptDateEnd=.$rptDateEnd,rptDate = .$rptDate))
-  TSnew <- dplyr::full_join(TSnew,tmp,by=c('rptDateBeg','rptDateEnd'))
-  TSnew <- transform(TSnew,rptDateBeg=NULL,rptDateEnd=NULL)
-
-  TSFdata <- dplyr::left_join(TSnew,TSFdata,by=c('stockID','rptDate'))
-  TSFdata <- na.omit(TSFdata)
-
-  TSFdata <- TSFdata %>% dplyr::group_by(date,stockID) %>% dplyr::mutate(id =row_number())
-  N <- max(TSFdata$id)
-  TSFdata <- TSFdata %>% dplyr::group_by(date,stockID) %>% dplyr::filter(max(id) > N/2)
-  if(stattype=='mean'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore,na.rm = TRUE))
-  }else if(stattype=='sd'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=sd(factorscore,na.rm = TRUE))
-  }else if(stattype=='mean/sd'){
-    TSF <- TSFdata %>%  dplyr::summarise(factorscore=mean(factorscore,na.rm = TRUE)/sd(factorscore,na.rm = TRUE))
-  }else if(stattype %in% c('slope','slope/sd')){
-    tmp <- TSFdata %>% do(mod = lm(factorscore ~ id, data = .))
-    tmp <- data.frame(tmp %>% broom::tidy(mod))
-    TSF <- tmp[tmp$term=='id',c("date","stockID","estimate")]
-    if(stattype=='slope'){
-      colnames(TSF) <- c("date","stockID","factorscore")
-    }else{
-      tmp <- TSFdata %>%  dplyr::summarise(sd=sd(factorscore))
-      TSF <- dplyr::left_join(TSF,tmp,by=c('date','stockID'))
-      TSF$factorscore <- TSF$estimate/TSF$sd
-      TSF <- transform(TSF,estimate=NULL,sd=NULL)
-    }
-  }
-
-  TSF <- dplyr::left_join(TS,TSF,by=c('date','stockID'))
-  colnames(TSF) <- c('date','stockID',varname)
-  return(TSF)
-}
-
-
 #' @rdname get_factor
 #' @export
 gf.BP_mrq <- function(TS) {
@@ -491,6 +370,15 @@ gf.BP_mrq <- function(TS) {
 #' @export
 gf.EP_ttm <- function(TS) {
   TSF <- gf.PE_ttm(TS,fillna = FALSE)
+  TSF <- transform(TSF,factorscore=1/factorscore)
+  return(TSF)
+}
+
+
+#' @rdname get_factor
+#' @export
+gf.CFP_ttm <- function(TS) {
+  TSF <- gf.PCF_ttm(TS,fillna = FALSE)
   TSF <- transform(TSF,factorscore=1/factorscore)
   return(TSF)
 }
@@ -538,7 +426,7 @@ gf.lev_ldtoop <- function(TS){
 #' @export
 gf.nl_size <- function(TS){
   TSF <- getTSF(TS,factorFun = 'gf.ln_mkt_cap',factorDir = -1,
-                factorRefine = refinePar_default("old_fashion"))
+                factorRefine = refinePar_default("scale"))
   TSF <- TSF[!is.na(TSF$factorscore),]
   TSF <- dplyr::rename(TSF,ln_mkt_cap=factorscore)
   TSF <- transform(TSF,factorscore=ln_mkt_cap^3)
@@ -629,94 +517,127 @@ gf.pio_f_score <- function(TS){
 #'
 NULL
 
-group_factor_subfun <- function(TS,factorType,refinePar){
-  group_factor <- CT_GroupFactorLists()
-  group_factor <- group_factor[group_factor$factorType==factorType,c("factorName","factorFun","factorPar","factorDir","wgt")]
-  local_factor <- CT_FactorLists()
-  local_factor <- local_factor[,c("factorID","factorName","factorPar")]
-  local_factor <- rename(local_factor,factorPar2=factorPar)
-  group_factor <- dplyr::left_join(group_factor,local_factor,by="factorName")
-  for(i in 1:nrow(group_factor)){
-    if(!is.na(group_factor$factorID[i]) && group_factor$factorPar[i]==group_factor$factorPar2[i]){
-      FactorLists_ <- buildFactorLists_lcfs(group_factor$factorID[i],factorRefine = refinePar)
-    }else{
-      if(group_factor$factorPar[i]==""){
-        FactorLists_ <- buildFactorLists(
-          buildFactorList(factorFun=group_factor$factorFun[i],
-                          factorPar=list(),
-                          factorDir=group_factor$factorDir[i],
-                          factorName = group_factor$factorName[i],
-                          factorRefine=refinePar))
+group_factor_subfun <- function(TS,factorType,refinePar,FactorLists,wgt){
+  if(missing(FactorLists)){
+    group_factor <- CT_GroupFactorLists()
+    group_factor <- group_factor[group_factor$factorType==factorType,c("factorName","factorFun","factorPar","factorDir","wgt")]
+    local_factor <- CT_FactorLists()
+    local_factor <- local_factor[,c("factorID","factorName","factorPar")]
+    local_factor <- rename(local_factor,factorPar2=factorPar)
+    group_factor <- dplyr::left_join(group_factor,local_factor,by="factorName")
+    for(i in 1:nrow(group_factor)){
+      if(!is.na(group_factor$factorID[i]) && group_factor$factorPar[i]==group_factor$factorPar2[i]){
+        FactorLists_ <- buildFactorLists_lcfs(group_factor$factorID[i],factorRefine = refinePar)
       }else{
-        FactorLists_ <- buildFactorLists(
-          buildFactorList(factorFun=group_factor$factorFun[i],
-                          factorPar=group_factor$factorPar[i],
-                          factorDir=group_factor$factorDir[i],
-                          factorName = group_factor$factorName[i],
-                          factorRefine=refinePar))
+        if(group_factor$factorPar[i]==""){
+          FactorLists_ <- buildFactorLists(
+            buildFactorList(factorFun=group_factor$factorFun[i],
+                            factorPar=list(),
+                            factorDir=group_factor$factorDir[i],
+                            factorName = group_factor$factorName[i],
+                            factorRefine=refinePar))
+        }else{
+          FactorLists_ <- buildFactorLists(
+            buildFactorList(factorFun=group_factor$factorFun[i],
+                            factorPar=group_factor$factorPar[i],
+                            factorDir=group_factor$factorDir[i],
+                            factorName = group_factor$factorName[i],
+                            factorRefine=refinePar))
+        }
       }
-
+      if(i==1){
+        FactorLists <- FactorLists_
+      }else{
+        FactorLists <- c(FactorLists,FactorLists_)
+      }
     }
-    if(i==1){
-      FactorLists <- FactorLists_
-    }else{
-      FactorLists <- c(FactorLists,FactorLists_)
+    wgt <- group_factor$wgt
+  }else{
+    if(missing(wgt)){
+      wgt <- rep(1/length(FactorLists),length(FactorLists))
     }
 
   }
 
-  TSF <- getMultiFactor(TS,FactorLists,group_factor$wgt)
+  TSF <- getMultiFactor(TS,FactorLists,wgt)
   return(TSF[,c("date","stockID","factorscore")])
 }
 
 
 #' @rdname group_factor
 #' @export
-gf.SIZE <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,factorType="SIZE",refinePar)
+gf.SIZE <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,factorType="SIZE",refinePar,FactorLists,wgt)
 }
 
 
 #' @rdname group_factor
 #' @export
-gf.GROWTH <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"GROWTH",refinePar)
+gf.GROWTH <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,"GROWTH",refinePar,FactorLists,wgt)
+}
+
+
+
+#' @rdname group_factor
+#' @export
+gf.TRADING <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,"TRADING",refinePar,FactorLists,wgt)
 }
 
 #' @rdname group_factor
 #' @export
-gf.FORECAST <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"FORECAST",refinePar)
+gf.EARNINGYIELD <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,"EARNINGYIELD",refinePar,FactorLists,wgt)
 }
 
 #' @rdname group_factor
 #' @export
-gf.TRADING <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"TRADING",refinePar)
+gf.VALUE <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,"VALUE",refinePar,FactorLists,wgt)
 }
+
 
 #' @rdname group_factor
 #' @export
-gf.EARNINGYIELD <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"EARNINGYIELD",refinePar)
+gf.OTHER <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+  re <- group_factor_subfun(TS,"OTHER",refinePar,FactorLists,wgt)
 }
 
-#' @rdname group_factor
+#' refinePar_zz
+#'
 #' @export
-gf.VALUE <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"VALUE",refinePar)
-}
-
-#' @rdname group_factor
-#' @export
-gf.QUALITY <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"QUALITY",refinePar)
-}
-
-#' @rdname group_factor
-#' @export
-gf.OTHER <- function(TS,refinePar=refinePar_default('old_fashion')){
-  re <- group_factor_subfun(TS,"OTHER",refinePar)
+#' @examples
+#' refinePar <- refinePar_zz()
+refinePar_zz <- function(type=c("zz","none"),
+         sectorAttr=defaultSectorAttr(),
+         log=FALSE,
+         regLists=list(fl_cap(log=TRUE))){
+  type <- match.arg(type)
+  if(type=="none"){
+    re <- list(outlier=list(method = "none",
+                            par=NULL,
+                            sectorAttr= NULL),
+               std=list(method = "none",
+                        log=log,
+                        sectorAttr=NULL,
+                        regLists=NULL),
+               na=list(method = "none",
+                       sectorAttr=NULL)
+    )
+  }else if(type=="zz"){
+    re <- list(outlier=list(method = "percentage",
+                            par=5,
+                            sectorAttr= NULL),
+               std=list(method = "scale",
+                        log=FALSE,
+                        sectorAttr=NULL,
+                        regLists=NULL),
+               na=list(method = "mean",
+                       sectorAttr=sectorAttr)
+    )
+  }
+  return(re)
 }
 
 
@@ -769,7 +690,7 @@ CT_GroupFactorLists <- function(){
 #' mTSF_refine
 #'
 #' @export
-mTSF_refine <- function(mTSF,refinePar=refinePar_default(type ="old_fashion")){
+mTSF_refine <- function(mTSF,refinePar=refinePar_default(type ="scale")){
   factorNames <- guess_factorNames(mTSF,silence = TRUE)
   for(i in 1:length(factorNames)){
     TSF_ <- mTSF[,c('date','stockID',factorNames[i])]
@@ -788,7 +709,7 @@ mTSF_refine <- function(mTSF,refinePar=refinePar_default(type ="old_fashion")){
 #' mTSF2groupf
 #'
 #' @export
-mTSF2groupf <- function(mTSF,refinePar=refinePar_default(type ="old_fashion"),keep_single_factors = FALSE){
+mTSF2groupf <- function(mTSF,refinePar=refinePar_default(type ="scale"),keep_single_factors = FALSE){
   mTSF_ <- mTSF_refine(mTSF,refinePar)
   fgroupconst <- CT_GroupFactorLists()
   groupNames <- unique(fgroupconst$factorType)

@@ -4,7 +4,7 @@
 \alias{mTSF_refine}
 \title{mTSF_refine}
 \usage{
-mTSF_refine(mTSF, refinePar = refinePar_default(type = "old_fashion"))
+mTSF_refine(mTSF, refinePar = refinePar_default(type = "scale"))
 }
 \description{
 mTSF_refine

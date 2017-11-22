@@ -4,7 +4,7 @@
 \alias{mTSF2groupf}
 \title{mTSF2groupf}
 \usage{
-mTSF2groupf(mTSF, refinePar = refinePar_default(type = "old_fashion"),
+mTSF2groupf(mTSF, refinePar = refinePar_default(type = "scale"),
   keep_single_factors = FALSE)
 }
 \description{
