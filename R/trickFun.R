@@ -1580,3 +1580,99 @@ getIndexBasicInfo <- function(indexID) {
   return(re)
 }
 
+
+
+lcdb.build.Bond_ConBDExchangeQuote <- function(){
+  qr <- "select convert(varchar,cb.TradingDay,112) 'date',
+  case c.SecuMarket
+  when 83 then c.SecuCode+'.SH'
+  when 90 then c.SecuCode+'.SZ'
+  END 'bondID',c.SecuAbbr 'bondName',
+  cb.BondNature,cb.Maturity,cb.YrMat,cb.ClosePrice,cb.ChangePCT,cb.TurnoverRate,cb.TurnoverValue
+  ,cb.NewConvetPrice,cb.StockPrice,cb.ConvertPremiumRate
+  from Bond_ConBDExchangeQuote cb
+  left JOIN Bond_Code c on cb.InnerCode=c.InnerCode
+  where cb.TradingDay>='2005-01-01' and cb.YrMat is not NULL
+  order by cb.TradingDay,c.SecuCode"
+  cvbond <- queryAndClose.odbc(db.jy(),qr)
+
+  cvstat <- cvbond %>% filter(BondNature %in% c(1,4)) %>% group_by(bondID) %>%
+    summarise(begT=min(date),endT=max(date)) %>% ungroup() %>% mutate(begT=intdate2r(begT),endT=intdate2r(endT))
+  strbvalue <- data.frame()
+  require(WindR)
+  w.start(showmenu = FALSE)
+  for(i in 1:nrow(cvstat)){
+    data <- w.wsd(cvstat$bondID[i],"strbvalue",cvstat$begT[i],cvstat$endT[i])[[2]]
+    data <- rename(data,date=DATETIME,strbvalue=STRBVALUE)
+    data <- cbind(data.frame(bondID=cvstat$bondID[i],row.names = NULL,stringsAsFactors = FALSE),data)
+    strbvalue <- rbind(strbvalue,data)
+  }
+  strbvalue <- transform(strbvalue,date=rdate2int(date))
+  cvbond <- left_join(cvbond,strbvalue,by=c('date','bondID'))
+  cvbond <- transform(cvbond,strbPremiumRate=(ClosePrice/strbvalue-1)*100)
+  con <- db.local()
+  dbWriteTable(con,'Bond_ConBDExchangeQuote',cvbond)
+  dbDisconnect(con)
+}
+
+
+#' lcdb.update.Bond_ConBDExchangeQuote
+#'
+#' @export
+#' @examples
+#' lcdb.update.Bond_ConBDExchangeQuote()
+lcdb.update.Bond_ConBDExchangeQuote <- function(){
+  con <- db.local()
+  begT <- dbGetQuery(con,"select max(date) from Bond_ConBDExchangeQuote")[[1]]
+  begT <- intdate2r(begT)
+  endT <- trday.nearest(Sys.Date()-1)
+  if(endT>begT){
+    qr <- paste("select convert(varchar,cb.TradingDay,112) 'date',
+                case c.SecuMarket
+                when 83 then c.SecuCode+'.SH'
+                when 90 then c.SecuCode+'.SZ'
+                END 'bondID',c.SecuAbbr 'bondName',
+                cb.BondNature,cb.Maturity,cb.YrMat,cb.ClosePrice,cb.ChangePCT,cb.TurnoverRate,cb.TurnoverValue
+                ,cb.NewConvetPrice,cb.StockPrice,cb.ConvertPremiumRate
+                from Bond_ConBDExchangeQuote cb
+                left JOIN Bond_Code c on cb.InnerCode=c.InnerCode
+                where cb.TradingDay>",QT(begT)," and cb.TradingDay<=",QT(endT)," and cb.YrMat is not NULL
+                order by cb.TradingDay,c.SecuCode")
+    cvbond <- queryAndClose.odbc(db.jy(),qr)
+
+    cvstat <- cvbond %>% filter(BondNature %in% c(1,4)) %>% mutate(date=intdate2r(date)) %>% select(date,bondID)
+    dates <- unique(cvstat$date)
+    strbvalue <- data.frame()
+    require(WindR)
+    w.start(showmenu = FALSE)
+    for(i in 1:length(dates)){
+      cvstat_ <- cvstat %>% filter(date==dates[i])
+      data <- w.wss(cvstat_$bondID,'strbvalue',tradeDate=dates[i])[[2]]
+      data <- rename(data,bondID=CODE,strbvalue=STRBVALUE)
+      data <- cbind(data.frame(date=dates[i],row.names = NULL),data)
+      strbvalue <- rbind(strbvalue,data)
+    }
+    strbvalue <- transform(strbvalue,date=rdate2int(date))
+    cvbond <- left_join(cvbond,strbvalue,by=c('date','bondID'))
+    cvbond <- transform(cvbond,strbPremiumRate=(ClosePrice/strbvalue-1)*100)
+    dbWriteTable(con,'Bond_ConBDExchangeQuote',cvbond,overwrite=FALSE,append=TRUE)
+    dbDisconnect(con)
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
