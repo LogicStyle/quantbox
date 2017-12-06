@@ -13,6 +13,9 @@
 \alias{gf.lev_dtoa}
 \alias{gf.lev_ldtoop}
 \alias{gf.nl_size}
+\alias{gf.inner_growth}
+\alias{gf.G_NP_longterm}
+\alias{gf.G_OR_longterm}
 \alias{gf.pio_f_score}
 \title{get factor}
 \usage{
@@ -37,6 +40,16 @@ gf.lev_dtoa(TS)
 gf.lev_ldtoop(TS)
 
 gf.nl_size(TS)
+
+gf.inner_growth(TS)
+
+gf.G_NP_longterm(TS, N = 12, freq = "q",
+  funchar = "\\"np\\",Last12MData(RDate,46078)/100000000",
+  stat = "slope/mean", rm_N = 6)
+
+gf.G_OR_longterm(TS, N = 12, freq = "q",
+  funchar = "\\"or\\",Last12MData(RDate,46002)/100000000",
+  stat = "slope/mean", rm_N = 6)
 
 gf.pio_f_score(TS)
 }

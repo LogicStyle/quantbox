@@ -54,20 +54,19 @@ table.factor.summary <- function(TSFR,N=10,fee=0.001){
 #' lcdb.add.QT_IndexQuote("EI000852")
 lcdb.add.QT_IndexQuote <- function(indexID){
   con <- db.local()
-  begT <- dbGetQuery(con,"select min(TradingDay) from QT_IndexQuote")[[1]]
-  begT <- intdate2r(begT)
-  endT <- dbGetQuery(con,"select max(TradingDay) from QT_IndexQuote")[[1]]
-  endT <- intdate2r(endT)
+  date <- dbGetQuery(con,"select min(TradingDay) 'begT',max(TradingDay) 'endT' from QT_IndexQuote")
+  begT <- intdate2r(date$begT)
+  endT <- intdate2r(date$endT)
   qr <- paste("SELECT q.InnerCode,convert(VARCHAR,TradingDay,112) 'TradingDay'
               ,PrevClosePrice,OpenPrice,HighPrice,LowPrice,ClosePrice
               ,TurnoverVolume,TurnoverValue,TurnoverDeals,ChangePCT
               ,NegotiableMV,q.XGRQ 'UpdateTime',ChangePCT/100 'DailyReturn',
               'EI'+s.SecuCode 'ID'
               FROM QT_IndexQuote q,SecuMain s
-              WHERE q.InnerCode=s.InnerCode and s.SecuCode=",QT(substr(indexID,3,8)),
+              WHERE q.InnerCode=s.InnerCode and s.SecuCode in",brkQT(substr(indexID,3,8)),
               " and TradingDay>=",QT(begT)," and TradingDay<=",QT(endT))
   re <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
-  dbGetQuery(con,paste("delete from QT_IndexQuote where ID=",QT(indexID),sep=''))
+  dbGetQuery(con,paste("delete from QT_IndexQuote where ID in",brkQT(indexID),sep=''))
   dbWriteTable(con,"QT_IndexQuote",re,overwrite=FALSE,append=TRUE,row.names=FALSE)
   dbDisconnect(con)
 }
@@ -436,6 +435,42 @@ gf.nl_size <- function(TS){
 }
 
 #' @rdname get_factor
+#' @export
+gf.inner_growth <- function(TS){
+  funchar <- '"ROE",Last12MData(Rdate,9900100),
+  "div",reportofall(9900500,RDate)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  re <- transform(re,factorscore=ROE*(1-div/100))
+  re <- re[,c('date','stockID','factorscore')]
+  return(re)
+}
+
+#' @rdname get_factor
+#' @export
+gf.G_NP_longterm <- function(TS,N=12,freq="q",funchar='"np",Last12MData(RDate,46078)/100000000',stat="slope/mean",rm_N = 6){
+  TSnew <- getrptDate_newest(TS)
+  rptTS <- unique(TSnew[,c("rptDate","stockID")])
+  FinStat <- rptTS.getFinStat_ts(rptTS,N=N,freq=freq,funchar = funchar,varname = 'factorscore',stat=stat,rm_N=rm_N)
+  TSF <- dplyr::left_join(TSnew,FinStat,by=c('rptDate','stockID'))
+  TSF$rptDate <- NULL
+  return(TSF)
+}
+
+#' @rdname get_factor
+#' @export
+gf.G_OR_longterm <- function(TS,N=12,freq="q",funchar='"or",Last12MData(RDate,46002)/100000000',stat="slope/mean",rm_N = 6){
+  TSnew <- getrptDate_newest(TS)
+  rptTS <- unique(TSnew[,c("rptDate","stockID")])
+  FinStat <- rptTS.getFinStat_ts(rptTS,N=N,freq=freq,funchar = funchar,varname = 'factorscore',stat=stat,rm_N=rm_N)
+  TSF <- dplyr::left_join(TSnew,FinStat,by=c('rptDate','stockID'))
+  TSF$rptDate <- NULL
+  return(TSF)
+}
+
+
+
+
+#' @rdname get_factor
 #' @author han.qian
 #' @export
 gf.pio_f_score <- function(TS){
@@ -669,6 +704,13 @@ gf.liquidityold <- function(TS,nwin=22){
   return(TSF)
 }
 
+
+
+
+
+
+
+
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
 # ===================== other  ===========================
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
@@ -750,11 +792,9 @@ reg.factorlists_recommend <- function(indexID,begT,endT,rebFreq = "month",rsqBar
   FactorLists <- buildFactorLists(
     buildFactorList(factorFun="gf.SIZE"),
     buildFactorList(factorFun="gf.GROWTH"),
-    buildFactorList(factorFun="gf.FORECAST"),
     buildFactorList(factorFun="gf.TRADING"),
     buildFactorList(factorFun="gf.EARNINGYIELD"),
     buildFactorList(factorFun="gf.VALUE"),
-    buildFactorList(factorFun="gf.QUALITY"),
     buildFactorList(factorFun="gf.OTHER"))
   TSF <- getMultiFactor(TS,FactorLists)
   TSFR <- na.omit(getTSR(TSF))
@@ -769,4 +809,20 @@ reg.factorlists_recommend <- function(indexID,begT,endT,rebFreq = "month",rsqBar
   return(re)
 }
 
+#' MApl
+#'
+#' @export
+#' @examples
+#' TSF <- MApl(TS)
+#' TSF <- MApl(TS,type='IsKtpl')
+MApl <- function(TS,type=c('IsDtpl','IsKtpl'),MA=c(10,20,120,250)){
+  type <- match.arg(type)
+  if(type=='IsDtpl'){
+    qr <- paste("IsDtpl(",paste(MA,collapse = ","),")",sep="")
+  }else{
+    qr <- paste("IsKtpl(",paste(MA,collapse = ","),")",sep="")
+  }
+  TSF <- TS.getTech_ts(TS, funchar = qr, varname = "dtpl")
+  return(TSF)
+}
 
