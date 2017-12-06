@@ -21,7 +21,8 @@
 \usage{
 gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 
-gf.doublePrice(TS, ROEType = c("ROE_ttm", "F_ROE", "ROE", "ROE_Q"))
+gf.doublePrice(TS, PBFun = c("gf.PB_mrq", "gf.PB_lyr"),
+  ROEFun = c("gf.ROE_ttm", "gf.ROE", "gf.F_ROE"))
 
 gf.dividendyield(TS, datasrc = c("ts", "jy", "wind"))
 

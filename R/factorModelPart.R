@@ -271,40 +271,24 @@ gf.smartQ <- function(TS,nwin=20,cycle='cy_1m()',bar=0.2) {
 
 #' @rdname get_factor
 #' @export
-gf.doublePrice <- function(TS,ROEType=c('ROE_ttm','F_ROE','ROE','ROE_Q')){
-  ROEType <- match.arg(ROEType)
+gf.doublePrice <- function(TS,PBFun=c('gf.PB_mrq','gf.PB_lyr'),ROEFun=c('gf.ROE_ttm','gf.ROE','gf.F_ROE')){
+  PBFun <- match.arg(PBFun)
+  ROEFun <- match.arg(ROEFun)
 
-  TSF <- gf.PB_mrq(TS)
-  if(ROEType=='ROE_ttm'){
-    tmp <- gf.ROE_ttm(TS)
-    tmp <- tmp[,c("date","stockID","factorscore")]
-    tmp <- transform(tmp,factorscore=factorscore/100)
-  }else if(ROEType=='F_ROE'){
-    tmp <- gf.F_ROE(TS)
-    tmp <- tmp[,c("date","stockID","factorscore")]
-
-  }else if(ROEType=='ROE'){
-    tmp <- gf.ROE(TS)
-    tmp <- tmp[,c("date","stockID","factorscore")]
-    tmp <- transform(tmp,factorscore=factorscore/100)
-  }else{
-    tmp <- gf.ROE_Q(TS)
-    tmp <- tmp[,c("date","stockID","factorscore")]
-    tmp <- transform(tmp,factorscore=factorscore/100)
+  PB <- getTSF(TS,factorFun = PBFun)
+  ROE <- getTSF(TS,factorFun = ROEFun)
+  PB <- PB %>% dplyr::rename(pb=factorscore) %>% dplyr::select(date,stockID,pb)
+  ROE <- ROE %>% dplyr::rename(roe=factorscore) %>% dplyr::select(date,stockID,roe)
+  if(ROEFun!='gf.F_ROE'){
+    ROE <- transform(ROE,roe=roe/100)
   }
-
-  TSF <- dplyr::left_join(TSF,tmp,by=c('date','stockID'))
-  colnames(TSF) <- c("date","stockID","PB_mrq_","ROE")
-  TSF <- na.omit(TSF)
-  TSF <- dplyr::filter(TSF,PB_mrq_!=0)
-  TSF <- dplyr::filter(TSF,ROE>0)
-
-  TSF$factorscore <- log(TSF$PB_mrq_*2,base=(1+TSF$ROE))
+  TSF <- dplyr::left_join(PB,ROE,by=c('date','stockID'))
+  TSF <- dplyr::filter(TSF,!is.na(pb),roe>0)
+  TSF$factorscore <- log(TSF$pb*2,base=(1+TSF$roe))
   TSF <- TSF[,c("date","stockID","factorscore")]
   TSF <- dplyr::left_join(TS,TSF,by=c('date','stockID'))
   return(TSF)
 }
-
 
 
 
