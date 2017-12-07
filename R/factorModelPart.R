@@ -87,40 +87,46 @@ lcdb.add.QT_IndexQuote <- function(indexID){
 #' port <- addwgt2port_amtao(port)
 #' port <- addwgt2port_amtao(port,wgtmax=0.1)
 #' @export
-addwgt2port_amtao <- function(port,wgtType=c('fs','fssqrt','ffsMV'),wgtmax=NULL,...){
+addwgt2port_amtao <- function(port,wgtType=c('fs','fssqrt','ffsMV'),wgtmax=NULL,totwgt=1,...){
   wgtType <- match.arg(wgtType)
   if(wgtType %in% c('fs','fssqrt')){
     port <- TS.getTech(port,variables="free_float_shares")
     if (wgtType=="fs") {
-      port <- plyr::ddply(port,"date",transform,wgt=free_float_shares/sum(free_float_shares,na.rm=TRUE))
+      port <- port %>% dplyr::group_by(date) %>% dplyr::mutate(wgt=free_float_shares/sum(free_float_shares,na.rm=TRUE)*totwgt)
     } else {
-      port <- plyr::ddply(port,"date",transform,wgt=sqrt(free_float_shares)/sum(sqrt(free_float_shares),na.rm=TRUE))
+      port <- port %>% dplyr::group_by(date) %>% dplyr::mutate(wgt=sqrt(free_float_shares)/sum(sqrt(free_float_shares),na.rm=TRUE)*totwgt)
     }
     port$free_float_shares <- NULL
   }else{
     port <- gf.free_float_sharesMV(port)
-    port <- plyr::ddply(port,"date",transform,wgt=factorscore/sum(factorscore,na.rm=TRUE))
+    port <- port %>% dplyr::group_by(date) %>% dplyr::mutate(wgt=factorscore/sum(factorscore,na.rm=TRUE)*totwgt)
     port <- transform(port,factorscore=NULL,wgt=ifelse(is.na(wgt),0,wgt))
   }
 
 
   if(!is.null(wgtmax)){
     subfun <- function(wgt){
-      df <- data.frame(wgt=wgt,rank=seq(1,length(wgt)))
-      df <- arrange(df,plyr::desc(wgt))
-      j <- 1
-      while(max(df$wgt)>wgtmax){
-        df$wgt[j] <- wgtmax
-        df$wgt[(j+1):nrow(df)] <- df$wgt[(j+1):nrow(df)]/sum(df$wgt[(j+1):nrow(df)])*(1-j*wgtmax)
-        j <- j+1
+      if(length(wgt)*wgtmax<=totwgt){
+        wgt_ <- rep(wgtmax,length(wgt))
+      }else{
+        df <- data.frame(wgt=wgt,rank=seq(1,length(wgt)))
+        df <- arrange(df,plyr::desc(wgt))
+        j <- 1
+        while(max(df$wgt)>wgtmax){
+          df$wgt[j] <- wgtmax
+          df$wgt[(j+1):nrow(df)] <- df$wgt[(j+1):nrow(df)]/sum(df$wgt[(j+1):nrow(df)])*(totwgt-j*wgtmax)
+          j <- j+1
+        }
+        df <- plyr::arrange(df,rank)
+        wgt_ <- df$wgt
       }
-      df <- plyr::arrange(df,rank)
-      return(df$wgt)
+      return(wgt_)
     }
-    port <- plyr::ddply(port,'date',plyr::here(transform),newwgt=subfun(wgt))
+    port <- port %>% dplyr::group_by(date) %>% dplyr::mutate(newwgt=subfun(wgt))
     port$wgt <- port$newwgt
     port$newwgt <- NULL
   }
+  port <- as.data.frame(port)
   return(port)
 }
 

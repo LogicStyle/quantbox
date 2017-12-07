@@ -5,7 +5,7 @@
 \title{add weight to port}
 \usage{
 addwgt2port_amtao(port, wgtType = c("fs", "fssqrt", "ffsMV"), wgtmax = NULL,
-  ...)
+  totwgt = 1, ...)
 }
 \arguments{
 \item{port}{is a  object.}
