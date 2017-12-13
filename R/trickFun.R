@@ -152,224 +152,117 @@ bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
 #' @export
 #' @examples
 #' lcdb.build.QT_IndexValuation()
-lcdb.build.QT_IndexValuation<- function(){
-
-  subfun <- function(indexDate){
-    tmp <- brkQT(substr(indexDate$indexID,3,8))
-
-    #get index component
-    qr <- paste("select 'EI'+s1.SecuCode 'indexID','EQ'+s2.SecuCode 'stockID',
-                convert(varchar(8),l.InDate,112) 'InDate',
-                convert(varchar(8),l.OutDate,112) 'OutDate'
-                from LC_IndexComponent l
-                LEFT join SecuMain s1 on l.IndexInnerCode=s1.InnerCode
-                LEFT join SecuMain s2 on l.SecuInnerCode=s2.InnerCode
-                where s1.SecuCode in",tmp,
-                " order by s1.SecuCode,l.InDate")
-    indexComp <- queryAndClose.odbc(db.jy(),qr)
-    con <- db.local()
-    dbWriteTable(con, name="amtao_tmp", value=indexComp, row.names = FALSE, overwrite = TRUE)
-    dbDisconnect(con)
-
-    #correct begT
-    tmpdate <- plyr::ddply(indexComp,'indexID',plyr::summarise,mindate=intdate2r(min(InDate)))
-    indexDate <- merge(indexDate,tmpdate,by='indexID')
-    indexDate$begT <- as.Date(ifelse(indexDate$begT<indexDate$mindate,indexDate$mindate,indexDate$begT),origin = "1970-01-01")
-    indexDate <- indexDate[,c("indexID","indexName","begT","endT")]
-
-    for(i in 1:nrow(indexDate)){
-      ptm <- proc.time()
-      cat(i,':',as.character(indexDate$indexID[i]),rdate2int(indexDate$begT[i]),'\n')
-
-      tmpdate <- rdate2int(getRebDates(indexDate$begT[i],indexDate$endT[i],'day'))
-      tmpdate <- data.frame(date=tmpdate)
-      con <- db.local()
-      dbWriteTable(con, name="yrf_tmp", value=tmpdate, row.names = FALSE, overwrite = TRUE)
-      dbDisconnect(con)
-      qr <- paste("SELECT a.date as date, b.stockID from yrf_tmp a, amtao_tmp b
-                  where b.IndexID=", QT(indexDate$indexID[i]),
-                  "and b.InDate<=a.date and (b.OutDate>a.date or b.OutDate IS NULL)")
-      TS <- dbGetQuery(db.local(),qr)
-      TS$date <- intdate2r(TS$date)
-      if(i==1){
-        tmp <- getRebDates(min(indexDate$begT),max(indexDate$endT),'day')
-        tmp <- getTS(tmp,indexID = 'EI801003')
-        alldata <- gf.PE_ttm(tmp,fillna = FALSE)
-        alldata <- dplyr::rename(alldata,pettm=factorscore)
-        tmp <- gf.PB_mrq(tmp,fillna = FALSE)
-        tmp <- dplyr::rename(tmp,pbmrq=factorscore)
-        alldata <- merge(alldata,tmp,by=c('date','stockID'))
-      }
-
-      TSF <- merge.x(TS,alldata,by=c('date','stockID'))
-      TSF <- TSF[!is.na(TSF$pettm),]
-      TSF <- TSF[!is.na(TSF$pbmrq),]
-
-      #pe median
-      indexvalue <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pettm))
-      indexvalue <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],indexvalue,valtype='PE',caltype='median')
-
-      #pe mean
-      tmp <- TSF[,c('date','stockID','pettm')]
-      tmp <- tmp[tmp$pettm>0 & tmp$pettm<1000,]
-      colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-      tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PE',caltype='mean')
-      indexvalue <- rbind(indexvalue,tmp)
-
-      #pb median
-      tmp <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pbmrq))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='median')
-      indexvalue <- rbind(indexvalue,tmp)
-
-      #pe mean
-      tmp <- TSF[,c('date','stockID','pbmrq')]
-      tmp <- tmp[tmp$pbmrq>0,]
-      colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-      tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='mean')
-      indexvalue <- rbind(indexvalue,tmp)
-
-
-      if(i==1){
-        re <- indexvalue
-      }else{
-        re <- rbind(re,indexvalue)
-      }
-    }
-    return(re)
-  }#subfun finished
-
-
-  indexset <- c('EI000016','EI399005','EI399006','EI000300','EI000905',
-                'EI000805','EI000979','EI000808','EI000819','EI000998',
-                'EI000934','EI399959','EI000933','EI000932','EI801120')
-
-  tmp <- brkQT(substr(indexset,3,8))
+lcdb.build.QT_IndexValuation<- function(indexID=c('EI399006','EI000933'),addIndex=FALSE){
   qr <- paste("select 'EI'+s.SecuCode 'indexID',s.SecuAbbr 'indexName',
               convert(varchar(8),i.PubDate,112) 'begT'
               from LC_IndexBasicInfo i,SecuMain s
-              where i.IndexCode=s.InnerCode and s.SecuCode in",tmp)
-  indexDate <- queryAndClose.odbc(db.jy(),qr)
-  indexDate$begT <- intdate2r(indexDate$begT)
-  indexDate[indexDate$begT<as.Date('2005-01-04'),'begT'] <- as.Date('2005-01-04')
-  indexDate$endT <- Sys.Date()-1
+              where i.IndexCode=s.InnerCode and s.SecuCode in",brkQT(substr(indexID,3,8)))
+  indexDate <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
+  indexDate <- transform(indexDate,begT=intdate2r(ifelse(begT<20050104,20050104,begT)),
+                              endT=Sys.Date()-1)
 
-  re <- subfun(indexDate)
-  re$date <- rdate2int(re$date)
   con <- db.local()
-  dbWriteTable(con,'QT_IndexValuation',re,row.names=FALSE)
+
+  if(addIndex){
+    old <- dbGetQuery(con,"select distinct indexID from QT_IndexValuation")
+    indexID <- setdiff(indexID,c(old$indexID))
+    if(length(indexID)==0){
+      return('Already in database!')
+    }
+    endT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation")
+    indexDate <- indexDate[indexDate$indexID %in% indexID,]
+    indexDate$endT <- intdate2r(endT$date)
+  }
+
+  re <- QT_IndexValuation_subfun(indexDate)
+  if(addIndex){
+    dbWriteTable(con,'QT_IndexValuation',re,overwrite=FALSE,append=TRUE,row.names=FALSE)
+  }else{
+    dbWriteTable(con,'QT_IndexValuation',re,row.names=FALSE)
+  }
+
   dbDisconnect(con)
   return('Done!')
 }
 
-#' lcdb.addindex.QT_IndexValuation
-#'
-#' @rdname index_valuation
-#' @export
-#' @examples
-#' lcdb.addindex.QT_IndexValuation()
-lcdb.addindex.QT_IndexValuation<- function(indexset){
+#inner function
+QT_IndexValuation_subfun <- function(indexDate){
 
-  subfun <- function(indexDate){
-    tmp <- QT(substr(indexDate$indexID,3,8))
+  #get index component
+  qr <- paste("select 'EI'+s1.SecuCode 'indexID','EQ'+s2.SecuCode 'stockID',
+              convert(varchar(8),l.InDate,112) 'InDate',
+              convert(varchar(8),l.OutDate,112) 'OutDate'
+              from LC_IndexComponent l
+              LEFT join SecuMain s1 on l.IndexInnerCode=s1.InnerCode
+              LEFT join SecuMain s2 on l.SecuInnerCode=s2.InnerCode
+              where s1.SecuCode in",brkQT(substr(indexDate$indexID,3,8)),
+              " order by s1.SecuCode,l.InDate")
+  indexComp <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
+  con <- db.local()
+  dbWriteTable(con, name="amtao_tmp", value=indexComp, row.names = FALSE, overwrite = TRUE)
 
-    #get index component
-    qr <- paste("select 'EI'+s1.SecuCode 'indexID','EQ'+s2.SecuCode 'stockID',
-                convert(varchar(8),l.InDate,112) 'InDate',
-                convert(varchar(8),l.OutDate,112) 'OutDate'
-                from LC_IndexComponent l
-                LEFT join SecuMain s1 on l.IndexInnerCode=s1.InnerCode
-                LEFT join SecuMain s2 on l.SecuInnerCode=s2.InnerCode
-                where s1.SecuCode=",tmp,
-                " order by s1.SecuCode,l.InDate")
-    indexComp <- queryAndClose.odbc(db.jy(),qr)
-    con <- db.local()
-    dbWriteTable(con, name="amtao_tmp", value=indexComp, row.names = FALSE, overwrite = TRUE)
-    dbDisconnect(con)
+  #correct begT
+  tmpdate <- plyr::ddply(indexComp,'indexID',plyr::summarise,mindate=intdate2r(min(InDate)))
+  indexDate <- indexDate %>% dplyr::left_join(tmpdate,by='indexID') %>%
+    dplyr::mutate(begT=as.Date(ifelse(begT<mindate,mindate,begT),origin='1970-01-01')) %>% dplyr::select(-mindate)
 
-    #correct begT
-    tmpdate <- plyr::ddply(indexComp,'indexID',plyr::summarise,mindate=intdate2r(min(InDate)))
-    indexDate <- merge(indexDate,tmpdate,by='indexID')
-    indexDate$begT <- as.Date(ifelse(indexDate$begT<indexDate$mindate,indexDate$mindate,indexDate$begT),origin = "1970-01-01")
-    indexDate <- indexDate[,c("indexID","indexName","begT","endT")]
-
-    tmpdate <- rdate2int(getRebDates(indexDate$begT,indexDate$endT,'day'))
-    tmpdate <- data.frame(date=tmpdate)
-    con <- db.local()
-    dbWriteTable(con, name="yrf_tmp", value=tmpdate, row.names = FALSE, overwrite = TRUE)
-
+  #get bigTS
+  bigTS <- data.frame()
+  tmpdate <- data.frame(date=rdate2int(getRebDates(min(indexDate$begT),max(indexDate$endT),'day')))
+  dbWriteTable(con, name="yrf_tmp", value=tmpdate, row.names = FALSE, overwrite = TRUE)
+  for(i in 1:nrow(indexDate)){
     qr <- paste("SELECT a.date as date, b.stockID from yrf_tmp a, amtao_tmp b
-                where b.IndexID=", QT(indexDate$indexID),
-                "and b.InDate<=a.date and (b.OutDate>a.date or b.OutDate IS NULL)")
-    TS <- dbGetQuery(con,qr)
-    TS$date <- intdate2r(TS$date)
+                where b.IndexID=", QT(indexDate$indexID[i]),
+                "and b.InDate<=a.date and (b.OutDate>a.date or b.OutDate IS NULL) and a.date>=",rdate2int(indexDate$begT[i]))
+    TS_ <- dbGetQuery(con,qr)
+    TS_ <- transform(TS_,date=intdate2r(date),indexID=indexDate$indexID[i])
+    bigTS <- rbind(bigTS,TS_)
+  }
 
-    alldata <- gf.PE_ttm(TS,fillna = FALSE)
-    alldata <- dplyr::rename(alldata,pettm=factorscore)
-    tmp <- gf.PB_mrq(TS,fillna = FALSE)
-    tmp <- dplyr::rename(tmp,pbmrq=factorscore)
-    alldata <- merge(alldata,tmp,by=c('date','stockID'))
+  #get pe pb data
+  TS <- dplyr::distinct(bigTS,date,stockID)
+  pedata <- getTSF(TS,factorFun = 'gf.PE_ttm',factorPar = list(fillna = FALSE))
+  pbdata <- getTSF(TS,factorFun = 'gf.PB_mrq',factorPar = list(fillna = FALSE))
+  pedata <- dplyr::rename(pedata,pettm=factorscore)
+  pbdata <- dplyr::rename(pbdata,pbmrq=factorscore)
+  alldata <- dplyr::left_join(bigTS,pedata,by=c('date','stockID'))
+  alldata <- dplyr::left_join(alldata,pbdata,by=c('date','stockID'))
 
-    TSF <- merge.x(TS,alldata,by=c('date','stockID'))
-    TSF <- TSF[!is.na(TSF$pettm),]
-    TSF <- TSF[!is.na(TSF$pbmrq),]
-
-    #pe median
-    indexvalue <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pettm))
-    indexvalue <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,indexvalue,valtype='PE',caltype='median')
-
+  pemeanfun <- function(factorscore){
     #pe mean
-    tmp <- TSF[,c('date','stockID','pettm')]
-    tmp <- tmp[tmp$pettm>0 & tmp$pettm<1000,]
-    colnames(tmp) <- c('date','stockID','factorscore')
-    tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-    tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-    tmp <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,tmp,valtype='PE',caltype='mean')
-    indexvalue <- rbind(indexvalue,tmp)
+    factorscore <- factorscore[!is.na(factorscore)]
+    factorscore <- factorscore[factorscore>0 & factorscore<1000]
+    outlier_u <- mean(factorscore)+3*sd(factorscore)
+    outlier_l <- mean(factorscore)-3*sd(factorscore)
+    factorscore[factorscore > outlier_u] <- outlier_u
+    factorscore[factorscore < outlier_l] <- outlier_l
+    return(mean(factorscore))
+  }
 
-    #pb median
-    tmp <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pbmrq))
-    tmp <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,tmp,valtype='PB',caltype='median')
-    indexvalue <- rbind(indexvalue,tmp)
+  pbmeanfun <- function(factorscore){
+    factorscore <- factorscore[!is.na(factorscore)]
+    factorscore <- factorscore[factorscore>0 & factorscore<100]
+    outlier_u <- mean(factorscore)+3*sd(factorscore)
+    outlier_l <- mean(factorscore)-3*sd(factorscore)
+    factorscore[factorscore > outlier_u] <- outlier_u
+    factorscore[factorscore < outlier_l] <- outlier_l
+    return(mean(factorscore))
+  }
 
-    #pe mean
-    tmp <- TSF[,c('date','stockID','pbmrq')]
-    tmp <- tmp[tmp$pbmrq>0,]
-    colnames(tmp) <- c('date','stockID','factorscore')
-    tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-    tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-    tmp <- cbind(indexID=indexDate$indexID,indexName=indexDate$indexName,tmp,valtype='PB',caltype='mean')
-    indexvalue <- rbind(indexvalue,tmp)
-    dbDisconnect(con)
-
-    return(indexvalue)
-  }#subfun finished
-
-  con1 <- db.local()
-  old <- dbGetQuery(con1,"select distinct indexID from QT_IndexValuation")
-  indexset <- setdiff(indexset,c(old$indexID))
-  if(length(indexset)==0) return('Already in database!')
-
-  qr <- paste("select 'EI'+s.SecuCode 'indexID',s.SecuAbbr 'indexName',
-              convert(varchar(8),i.PubDate,112) 'begT'
-              from LC_IndexBasicInfo i,SecuMain s
-              where i.IndexCode=s.InnerCode and s.SecuCode=",QT(substr(indexset,3,8)))
-  indexDate <- queryAndClose.odbc(db.jy(),qr)
-  indexDate$begT <- intdate2r(indexDate$begT)
-  indexDate[indexDate$begT<as.Date('2005-01-04'),'begT'] <- as.Date('2005-01-04')
-  endT <- dbGetQuery(con1,"select max(date) 'date' from QT_IndexValuation")
-  indexDate$endT <- intdate2r(endT$date)
-
-  re <- subfun(indexDate)
-  re$date <- rdate2int(re$date)
-  dbWriteTable(con1,'QT_IndexValuation',re,overwrite=F,append=T,row.names=FALSE)
-  dbDisconnect(con1)
-  return('Done!')
-
+  #summarize
+  indexvalue <- alldata %>% dplyr::group_by(date,indexID) %>% dplyr::summarise(PE_median=median(pettm,na.rm = TRUE),
+                                                                                PE_mean=pemeanfun(pettm),
+                                                                                PB_median=median(pbmrq,na.rm = TRUE),
+                                                                                PB_mean=pbmeanfun(pbmrq))
+  indexvalue <- tidyr::gather(indexvalue,key = "key", value = "value",-date,-indexID)
+  indexvalue <- tidyr::separate(indexvalue,key,c('valtype','caltype'))
+  indexvalue <- dplyr::left_join(indexvalue,indexDate[,c('indexID','indexName')],by='indexID')
+  indexvalue <- indexvalue[,c("indexID","indexName","date","value","valtype","caltype")]
+  indexvalue <- transform(indexvalue,date=rdate2int(date))
+  dbDisconnect(con)
+  return(indexvalue)
 }
+
 
 
 #' lcdb.update.QT_IndexValuation
@@ -379,147 +272,78 @@ lcdb.addindex.QT_IndexValuation<- function(indexset){
 #' @examples
 #' lcdb.update.QT_IndexValuation()
 #' @export
-lcdb.update.QT_IndexValuation<- function(){
-
-  subfun <- function(indexDate){
-    tmp <- brkQT(substr(indexDate$indexID,3,8))
-
-    #get index component
-    qr <- paste("select 'EI'+s1.SecuCode 'indexID','EQ'+s2.SecuCode 'stockID',
-                convert(varchar(8),l.InDate,112) 'InDate',
-                convert(varchar(8),l.OutDate,112) 'OutDate'
-                from LC_IndexComponent l
-                LEFT join SecuMain s1 on l.IndexInnerCode=s1.InnerCode
-                LEFT join SecuMain s2 on l.SecuInnerCode=s2.InnerCode
-                where s1.SecuCode in",tmp,
-                " order by s1.SecuCode,l.InDate")
-    con <- db.jy()
-    indexComp <- sqlQuery(con,qr)
-    odbcClose(con)
-    con <- db.local()
-    dbWriteTable(con, name="amtao_tmp", value=indexComp, row.names = FALSE, overwrite = TRUE)
-    dbDisconnect(con)
-
-    for(i in 1:nrow(indexDate)){
-      cat(i,':',as.character(indexDate$indexID[i]),rdate2int(indexDate$begT[i]),'\n')
-
-      tmpdate <- rdate2int(getRebDates(indexDate$begT[i],indexDate$endT[i],'day'))
-      tmpdate <- data.frame(date=tmpdate)
-      con <- db.local()
-      dbWriteTable(con, name="yrf_tmp", value=tmpdate, row.names = FALSE, overwrite = TRUE)
-      dbDisconnect(con)
-      qr <- paste("SELECT a.date as date, b.stockID from yrf_tmp a, amtao_tmp b
-                  where b.IndexID=", QT(indexDate$indexID[i]),
-                  "and b.InDate<=a.date and (b.OutDate>a.date or b.OutDate IS NULL)")
-      TS <- dbGetQuery(db.local(),qr)
-      TS$date <- intdate2r(TS$date)
-      if(i==1){
-        tmp <- getRebDates(min(indexDate$begT),max(indexDate$endT),'day')
-        tmp <- getTS(tmp,indexID = 'EI801003')
-        alldata <- gf.PE_ttm(tmp,fillna = FALSE)
-        alldata <- dplyr::rename(alldata,pettm=factorscore)
-        tmp <- gf.PB_mrq(tmp,fillna = FALSE)
-        tmp <- dplyr::rename(tmp,pbmrq=factorscore)
-        alldata <- merge(alldata,tmp,by=c('date','stockID'))
-      }
-
-      TSF <- merge.x(TS,alldata,by=c('date','stockID'))
-      TSF <- dplyr::filter(TSF,!is.na(pettm),!is.na(pbmrq))
-
-      #pe median
-      indexvalue <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pettm))
-      indexvalue <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],indexvalue,valtype='PE',caltype='median')
-
-      #pe mean
-      tmp <- TSF[,c('date','stockID','pettm')]
-      tmp <- dplyr::filter(tmp,pettm>0,pettm<1000)
-      colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-      tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PE',caltype='mean')
-      indexvalue <- rbind(indexvalue,tmp)
-
-      #pb median
-      tmp <- plyr::ddply(TSF,'date',plyr::summarise,value=median(pbmrq))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='median')
-      indexvalue <- rbind(indexvalue,tmp)
-
-      #pe mean
-      tmp <- TSF[,c('date','stockID','pbmrq')]
-      tmp <- tmp[tmp$pbmrq>0,]
-      colnames(tmp) <- c('date','stockID','factorscore')
-      tmp <- factor_outlier(tmp,method='sd',par = 3,sectorAttr = NULL)
-      tmp <- plyr::ddply(tmp,'date',plyr::summarise,value=mean(factorscore))
-      tmp <- cbind(indexID=indexDate$indexID[i],indexName=indexDate$indexName[i],tmp,valtype='PB',caltype='mean')
-      indexvalue <- rbind(indexvalue,tmp)
-
-      if(i==1){
-        re <- indexvalue
-      }else{
-        re <- rbind(re,indexvalue)
-      }
-    }
-    return(re)
-  }#subfun finished
-
+lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
   con <- db.local()
-  begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation")
-  begT <- trday.nearby(intdate2r(begT$date),by=1)
-  endT <- trday.nearby(Sys.Date(),by=-1)
-  if(begT>endT){
-    return('Done!')
-  }else{
-    indexDate <- dbGetQuery(con,"select distinct indexID,indexName from QT_IndexValuation")
-    indexDate$begT <- begT
-    indexDate$endT <- endT
-
-    re <- subfun(indexDate)
-    re$date <- rdate2int(re$date)
-    dbWriteTable(con,'QT_IndexValuation',re,overwrite=F,append=T,row.names=FALSE)
-    dbDisconnect(con)
-    return('Done!')
+  if(missing(begT)){
+    begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation")
+    begT <- trday.nearby(intdate2r(begT$date),by=1)
   }
+
+  if(begT<=endT){
+    qr <- paste("delete from QT_IndexValuation where date>=",rdate2int(begT)," and date<=",rdate2int(endT))
+    dbSendQuery(con,qr)
+
+    indexDate <- dbGetQuery(con,"select distinct indexID,indexName from QT_IndexValuation")
+    indexDate <- transform(indexDate,begT=begT,endT=endT)
+    re <- QT_IndexValuation_subfun(indexDate)
+    dbWriteTable(con,'QT_IndexValuation',re,overwrite=FALSE,append=TRUE,row.names=FALSE)
+  }
+  dbDisconnect(con)
+  return('Done!')
 }
 
 
-#' getIndexValuation
-#'
 #' @rdname index_valuation
-#' @author Andrew Dow
-#' @examples
-#' re <- getIV()
 #' @export
-getIV <- function(valtype=c('PE','PB'),caltype=c('median','mean'),
+#' @examples
+#' re <- getIndexValuation()
+#' re <- getIndexValuation(caltype='median',begT = Sys.Date(),endT = Sys.Date())
+getIndexValuation <- function(valtype=c('PE','PB'),caltype=c('median','mean'),
                   begT=as.Date('2005-01-04'),endT=Sys.Date()-1){
-  valtype <- match.arg(valtype)
-  caltype <- match.arg(caltype)
 
-  qr <- paste("select indexID,indexName,date,value from QT_IndexValuation
-              where date>=",rdate2int(begT),
-              " and date<=",rdate2int(endT),
-              "and valtype=",QT(valtype)," and caltype=",QT(caltype))
+  if(begT==Sys.Date() && endT==Sys.Date()){
+    lcdb.update.QT_IndexValuation(begT,endT)
+  }
+
   con <- db.local()
+  qr <- paste("select * from QT_IndexValuation where date<=",rdate2int(endT),
+              " and valtype in",brkQT(valtype)," and caltype in",brkQT(caltype),sep="")
   re <- dbGetQuery(con,qr)
-  dbDisconnect(con)
-  re$date <- intdate2r(re$date)
-  name <- paste(valtype,caltype,sep='_')
-  colnames(re) <- c("indexID","indexName","date",name)
-  re <- arrange(re,indexID,date)
-
+  re <- re %>% mutate(date=intdate2r(date),value=round(value,digits = 2)) %>% tidyr::unite(type,valtype,caltype)
   Nindex <- unique(re[,c('indexID','indexName')])
+  re <- reshape2::dcast(re,date+indexID+indexName~type,value.var = 'value')
+  re <- dplyr::arrange(re,indexID,date)
+
   result <- data.frame()
   for(i in 1:nrow(Nindex)){
-    Data <- re[re$indexID==Nindex$indexID[i],c('date',name)]
-    Datats <- xts::xts(Data[,-1],order.by = Data[,1])
-    Datats <- TTR::runPercentRank(Datats, n = 250, cumulative = T, exact.multiplier = 0.5)
-    Datats <-  data.frame(date=zoo::index(Datats), value=zoo::coredata(Datats))
-    Datats <- Datats[251:nrow(Datats),]
-    Datats <- cbind(Nindex$indexID[i],Nindex$indexName[i],Datats)
-    colnames(Datats) <- c("indexID","indexName","date","percentRank")
-    result <- rbind(result,Datats)
+    Data <- re %>% dplyr::filter(indexID==Nindex$indexID[i]) %>% dplyr::select(-indexID,-indexName)
+
+    for(j in 2:ncol(Data)){
+      Datats <- xts::xts(Data[,j],order.by = Data[,1])
+      Datats <- TTR::runPercentRank(Datats, n = 250, cumulative = TRUE, exact.multiplier = 0.5)
+      Datats <-  data.frame(date=zoo::index(Datats),indexID=Nindex$indexID[i],
+                            indexName=Nindex$indexName[i],
+                            value=round(zoo::coredata(Datats),4),stringsAsFactors = FALSE)
+      Datats <- Datats[251:nrow(Datats),]
+      colnames(Datats) <- c('date','indexID','indexName',paste('per',colnames(Data)[j],sep = ''))
+      if(j==2){
+        result_ <- Datats
+      }else{
+        result_ <- dplyr::left_join(result_,Datats,by=c('date','indexID','indexName'))
+      }
+    }
+    result <- rbind(result,result_)
   }
-  result <- merge.x(result,re,by = c("indexID","indexName","date"))
-  result <- arrange(result,date,indexID)
+
+  result <- result %>% dplyr::filter(date>=begT,date<=endT) %>%
+    left_join(re,by=c('date','indexID','indexName')) %>%
+    dplyr::arrange(date,indexID)
+
+  if(begT==Sys.Date() && endT==Sys.Date()){
+    qr <- paste("delete from QT_IndexValuation where date=",rdate2int(Sys.Date()))
+    dbSendQuery(con,qr)
+  }
+  dbDisconnect(con)
   return(result)
 }
 

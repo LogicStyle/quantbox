@@ -492,7 +492,7 @@ gf.pio_f_score <- function(TS){
   dat_extra_old <- gf.totalshares(TS_old)
 
   # data double checking
-  if((nrow(dat) != nrow(TS)) | (nrow(dat_old) != nrow(TS)) | (nrow(dat_extra) != nrow(TS)) | (nrow(dat_extra_old) != nrow(TS))){
+  if((nrow(dat) != nrow(TS)) || (nrow(dat_old) != nrow(TS)) || (nrow(dat_extra) != nrow(TS)) || (nrow(dat_extra_old) != nrow(TS))){
     stop("Data retrieving failed.")
   }
 
@@ -523,7 +523,7 @@ gf.pio_f_score <- function(TS){
   TSF$score9 <- (dat$AssetTurnoverRate > dat_old$AssetTurnoverRate) + 0
 
   # output
-  TSF$factorscore <- rowSums(TSF[,3:11], na.rm = TRUE)
+  TSF$factorscore <- rowSums(dplyr::select(TSF,score1:score9),na.rm = TRUE)
   TSF <- TSF[,c("date","stockID","factorscore")]
   return(TSF)
 }

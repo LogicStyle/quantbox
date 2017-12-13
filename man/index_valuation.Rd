@@ -3,37 +3,29 @@
 \name{index_valuation}
 \alias{index_valuation}
 \alias{lcdb.build.QT_IndexValuation}
-\alias{lcdb.addindex.QT_IndexValuation}
 \alias{lcdb.update.QT_IndexValuation}
-\alias{getIV}
+\alias{getIndexValuation}
 \title{lcdb.build.QT_IndexValuation}
 \usage{
-lcdb.build.QT_IndexValuation()
+lcdb.build.QT_IndexValuation(indexID = c("EI399006", "EI000933"),
+  addIndex = FALSE)
 
-lcdb.addindex.QT_IndexValuation(indexset)
+lcdb.update.QT_IndexValuation(begT, endT = Sys.Date() - 1)
 
-lcdb.update.QT_IndexValuation()
-
-getIV(valtype = c("PE", "PB"), caltype = c("median", "mean"),
+getIndexValuation(valtype = c("PE", "PB"), caltype = c("median", "mean"),
   begT = as.Date("2005-01-04"), endT = Sys.Date() - 1)
 }
 \description{
 lcdb.build.QT_IndexValuation
 
-lcdb.addindex.QT_IndexValuation
-
 lcdb.update.QT_IndexValuation
-
-getIndexValuation
 }
 \examples{
 lcdb.build.QT_IndexValuation()
-lcdb.addindex.QT_IndexValuation()
 lcdb.update.QT_IndexValuation()
-re <- getIV()
+re <- getIndexValuation()
+re <- getIndexValuation(caltype='median',begT = Sys.Date(),endT = Sys.Date())
 }
 \author{
-Andrew Dow
-
 Andrew Dow
 }
