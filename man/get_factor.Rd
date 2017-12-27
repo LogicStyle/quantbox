@@ -16,7 +16,7 @@
 \alias{gf.inner_growth}
 \alias{gf.G_NP_longterm}
 \alias{gf.G_OR_longterm}
-\alias{gf.pio_f_score}
+\alias{gf.ca_ratio}
 \title{get factor}
 \usage{
 gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
@@ -52,7 +52,7 @@ gf.G_OR_longterm(TS, N = 12, freq = "q",
   funchar = "\\"or\\",Last12MData(RDate,46002)/100000000",
   stat = "slope/mean", rm_N = 6)
 
-gf.pio_f_score(TS)
+gf.ca_ratio(TS, fintype = c("PE", "PB", "PCF"), N = 5, inflaAdj = FALSE)
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}
@@ -69,7 +69,4 @@ TS <- getTS(RebDates,'EI000300')
 TSF <- gf.smartQ(TS)
 TSF <- gf.dividendyield(TS)
 TSF <- gf.doublePrice(TS)
-}
-\author{
-han.qian
 }

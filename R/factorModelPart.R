@@ -460,77 +460,6 @@ gf.G_OR_longterm <- function(TS,N=12,freq="q",funchar='"or",Last12MData(RDate,46
 
 
 
-#' @rdname get_factor
-#' @author han.qian
-#' @export
-gf.pio_f_score <- function(TS){
-
-  # TS manipulating
-  check.TS(TS)
-  TS_old <- TS
-  TS_old$date <- trday.offset(TS$date, by = lubridate::years(-1))
-  TS_rpt <- getrptDate_newest(TS)
-  TS_old_rpt <- TS_rpt
-  TS_old_rpt$rptDate <- rptDate.yoy(TS_old_rpt$rptDate)
-
-  # get data part1
-  multi_funchar <- '"OCF",reportofall(9900005,Rdate),
-  "dOCF",reportofall(9900004,Rdate),
-  "NetValue",reportofall(9900003,Rdate),
-  "Debt",reportofall(9900024,Rdate),
-  "Leverage",reportofall(9900203,Rdate),
-  "CurrentRatio",reportofall(9900200,Rdate),
-  "GrossMargin",reportofall(9900103,Rdate),
-  "AssetTurnoverRate",reportofall(9900416,Rdate),
-  "ROA",reportofall(9900100,Rdate)'
-
-  dat <- rptTS.getFin_ts(TS_rpt, multi_funchar)
-  dat_old <- rptTS.getFin_ts(TS_old_rpt, multi_funchar)
-
-  # get data part2
-  dat_extra <- gf.totalshares(TS)
-  dat_extra_old <- gf.totalshares(TS_old)
-
-  # data double checking
-  if((nrow(dat) != nrow(TS)) || (nrow(dat_old) != nrow(TS)) || (nrow(dat_extra) != nrow(TS)) || (nrow(dat_extra_old) != nrow(TS))){
-    stop("Data retrieving failed.")
-  }
-
-  # TSF
-  TSF <- TS
-  # PROFITABILITY
-  ### ROA > 0
-  TSF$score1 <- (dat$ROA > 0) + 0
-  ### OCF > 0
-  TSF$score2 <- (dat$OCF > 0) + 0
-  ### dROA > 0
-  TSF$score3 <- (dat$ROA > dat_old$ROA) + 0
-  ### ACCRUALS [(OPERATING CASH FLOW/TOTAL ASSETS) > ROA]
-  TSF$score4 <- ((dat$OCF/(dat$NetValue + dat$Debt)*100) > dat$ROA) + 0
-
-  # LEVERAGE, LIQUIDITY AND SOURCE OF FUNDS
-  ### dLEVERAGE(LONG-TERM) < 0
-  TSF$score5 <- (dat$Leverage < dat_old$Leverage) + 0
-  ### d(Current ratio) > 0
-  TSF$score6 <- (dat$CurrentRatio > dat_old$CurrentRatio) + 0
-  ### d(Number of shares) == 0
-  TSF$score7 <- (dat_extra$factorscore == dat_extra_old$factorscore) + 0
-
-  # OPERATING EFFICIENCY
-  ### d(Gross Margin) > 0
-  TSF$score8 <- (dat$GrossMargin > dat_old$GrossMargin) + 0
-  ### d(Asset Turnover ratio) > 0
-  TSF$score9 <- (dat$AssetTurnoverRate > dat_old$AssetTurnoverRate) + 0
-
-  # output
-  TSF$factorscore <- rowSums(dplyr::select(TSF,score1:score9),na.rm = TRUE)
-  TSF <- TSF[,c("date","stockID","factorscore")]
-  return(TSF)
-}
-
-
-
-
 
 #' group factor
 #'
@@ -695,7 +624,69 @@ gf.liquidityold <- function(TS,nwin=22){
 }
 
 
+#' @rdname get_factor
+#' @export
+gf.ca_ratio <- function(TS,fintype=c('PE','PB','PCF'),N=5,inflaAdj=FALSE){
+  fintype <- match.arg(fintype)
 
+  TS_ <- getrptDate_newest(TS,freq = 'y',mult="last")
+  TS_ <- TS_[!is.na(TS_$rptDate),]
+  rptTS <- unique(TS_[, c("rptDate","stockID")])
+
+  #get market cap
+  size <- gf_cap(TS)
+  size <- dplyr::rename(size,mktcap=factorscore)
+
+  #get f-score
+  if(fintype=='PE'){
+    funchar <-  '"factorscore",ReportOfAll(46078,Rdate)/100000000'
+  }else if(fintype=='PB'){
+    funchar <-  '"factorscore",ReportOfAll(44140,Rdate)/100000000'
+  }else if(fintype=='PCF'){
+    funchar <-  '"factorscore",ReportOfAll(48061,Rdate)/100000000'
+  }
+
+  FinSeri <- rptTS.getFinSeri_ts(rptTS = rptTS,N = N-1,freq = 'y',funchar = funchar)
+
+  if(inflaAdj){
+    #get raw cpi data
+    require(WindR)
+    w.start(showmenu = FALSE)
+    cpidb <- data.frame(rptDate=sort(unique(FinSeri$lag_rptDate)))
+    cpidb_ <- w.edb('M0010990',min(cpidb$rptDate),max(cpidb$rptDate),'Fill=Previous')[['Data']]
+    cpidb_ <- dplyr::rename(cpidb_,rptDate=DATETIME,inflation=CLOSE)
+    cpidb <- dplyr::left_join(cpidb,cpidb_,by='rptDate')
+    cpidb$inflation <- zoo::na.locf(cpidb$inflation) #fill na  with previous value
+    cpidb <- transform(cpidb,inflation=100/inflation)
+
+    rptDates <- sort(unique(FinSeri$rptDate))
+    #get inflation adjusted ratio
+    cpirate <- cbind(rptDate=rptDates,rptDate.offset(rptDates, by=-(N-1):0, freq = 'y'))
+    cpirate <- reshape2::melt(cpirate,id.vars="rptDate",variable.name="lagN",value.name="lag_rptDate")
+    cpirate <- dplyr::left_join(cpirate,cpidb,by = c("lag_rptDate" = "rptDate"))
+    cpirate <- cpirate %>% dplyr::arrange(rptDate,lag_rptDate) %>%
+      dplyr::group_by(rptDate) %>% dplyr::mutate(cuminf=cumprod(inflation)) %>% dplyr::ungroup()
+
+    #inflation adjusted size
+    cpi_for_size <- cpirate[cpirate$lagN=='y0',c('rptDate','cuminf')]
+    TSF <- TS_ %>% dplyr::left_join(size,by=c("date","stockID")) %>%
+      dplyr::left_join(cpi_for_size,by='rptDate') %>% dplyr::mutate(mktcap=mktcap*cuminf) %>%
+      dplyr::select(-cuminf)
+
+    #inflation adjusted f-score
+    rptTS_stat <- FinSeri %>% dplyr::left_join(cpirate[,c("rptDate","lag_rptDate","cuminf")],by=c('rptDate','lag_rptDate')) %>%
+      dplyr::mutate(factorscore=factorscore*cuminf) %>% dplyr::group_by(rptDate,stockID) %>%
+      dplyr::summarise(factorscore=mean(factorscore,na.rm = TRUE))
+  }else{
+    rptTS_stat <- calcFinStat(FinSeri=FinSeri,stat = 'mean',fname = "factorscore")
+    TSF <- dplyr::left_join(size, TS_, by=c("date","stockID"))
+  }
+  rptTS_stat <- rptTS_stat[rptTS_stat$factorscore!=0,]
+  TSF <- dplyr::left_join(TSF, rptTS_stat, by=c("rptDate","stockID"))
+  TSF <- transform(TSF,factorscore=mktcap/factorscore,rptDate=NULL,mktcap=NULL)
+  TSF <- dplyr::left_join(TS,TSF,by=c("date","stockID"))
+  return(TSF)
+}
 
 
 
@@ -815,4 +806,18 @@ MApl <- function(TS,type=c('IsDtpl','IsKtpl'),MA=c(10,20,120,250)){
   TSF <- TS.getTech_ts(TS, funchar = qr, varname = "dtpl")
   return(TSF)
 }
+
+
+expandTS2TSF <- function(TS,nwin,rawdata){
+  TS_ <- data.frame(date=unique(TS$date))
+  TS_ <- transform(TS_,begT=trday.nearby(date,-nwin))
+  TS_ <- TS_ %>% dplyr::rowwise() %>%
+    dplyr::do(data.frame(date=.$date,TradingDay=trday.get(.$begT, .$date)))
+  TS_ <- dplyr::full_join(TS_,TS,by='date')
+  result <- dplyr::left_join(TS_,rawdata,by=c('stockID','TradingDay'))
+  result <- na.omit(result)
+  result <- dplyr::arrange(result,date,stockID,TradingDay)
+  return(result)
+}
+
 

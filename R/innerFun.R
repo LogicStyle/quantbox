@@ -464,6 +464,23 @@ lcfs.update.amtao <- function(factorFun,factorPar,factorDir,factorID,begT,endT,s
 
 
 
+andrew_lcdb.update.LC_RptDate<-function(){
+  qr <- "SELECT 'EQ'+s.SecuCode 'stockID',l.CompanyCode
+	  ,convert(varchar,EndDate,112) 'EndDate'
+      ,convert(varchar,InfoPublDate,112) 'PublDate',UpdateTime
+  FROM LC_MainDataNew l,SecuMain s
+  where Mark=2 and l.CompanyCode=s.CompanyCode and s.SecuCategory=1
+  and s.SecuMarket in(83,90)
+  and s.SecuCode not like 'X%'
+  order by s.SecuCode,l.EndDate,l.InfoPublDate"
+  tb.from <- queryAndClose.odbc(db.jy(),query=qr)
+  tb.from <- tb.from %>% group_by(stockID) %>% mutate(PublDate_next=lead(PublDate))
+  tb.from <- tb.from[,c("stockID","CompanyCode","EndDate","PublDate","PublDate_next","UpdateTime")]
 
+  con <- db.local()
+  dbWriteTable(con,"LC_RptDate",tb.from,overwrite=TRUE,append=FALSE,row.names=FALSE)
+  dbSendQuery(con,"CREATE UNIQUE INDEX [IX_LC_RptDate] ON [LC_RptDate] ([stockID], [PublDate], [EndDate])")
+  dbDisconnect(con)
+}
 
 
