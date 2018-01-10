@@ -263,6 +263,32 @@ QT_IndexValuation_subfun <- function(indexDate){
   return(indexvalue)
 }
 
+QT_IndexValuation_subfunF <- function(indexDate){
+  require(WindR)
+  w.start(showmenu = FALSE)
+  indexValue <- data.frame()
+  for(i in 1:nrow(indexDate)){
+    indexValue_<-w.wsd(indexDate$indexID[i],"pe_ttm,pb_lf",indexDate$begT[i],indexDate$endT[i])[[2]]
+    indexValue_ <- transform(indexValue_,indexID=indexDate$indexID[i],indexName=indexDate$indexName[i])
+    indexValue <- rbind(indexValue,indexValue_)
+  }
+
+  indexValue <- indexValue[!is.nan(indexValue$PE_TTM),]
+  indexpe <- reshape2::dcast(indexValue,DATETIME~indexID,value.var = 'PE_TTM',fill = NA)
+  indexpb <- reshape2::dcast(indexValue,DATETIME~indexID,value.var = 'PB_LF',fill = NA)
+  indexpe <- zoo::na.locf(indexpe)
+  indexpb <- zoo::na.locf(indexpb)
+  indexpe <- reshape2::melt(indexpe,id='DATETIME',variable.name = "indexID",value.name = "PE_TTM",na.rm = TRUE)
+  indexpb <- reshape2::melt(indexpb,id='DATETIME',variable.name = "indexID",value.name = "PB_LF",na.rm = TRUE)
+  indexValue <- left_join(indexpe,indexpb)
+  indexValue <- reshape2::melt(indexValue,id=c('DATETIME','indexID'),variable.name = "valtype",value.name = "value")
+  indexValue <- transform(indexValue,date=rdate2int(as.Date(DATETIME)),
+                          valtype=ifelse(valtype=='PE_TTM','PE','PB'),
+                          caltype='median')
+  indexValue <- left_join(indexValue,indexDate[,c('indexID','indexName')])
+  indexValue <- indexValue[,c("indexID","indexName","date","value","valtype","caltype")]
+  return(indexvalue)
+}
 
 
 #' lcdb.update.QT_IndexValuation
@@ -285,7 +311,14 @@ lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
 
     indexDate <- dbGetQuery(con,"select distinct indexID,indexName from QT_IndexValuation")
     indexDate <- transform(indexDate,begT=begT,endT=endT)
-    re <- QT_IndexValuation_subfun(indexDate)
+    indexDateA <- indexDate[!(stringr::str_sub(indexDate$indexID,-3,-1) %in% c('.GI','.HI')),]
+    indexDateF <- indexDate[stringr::str_sub(indexDate$indexID,-3,-1) %in% c('.GI','.HI'),]
+    re <- QT_IndexValuation_subfun(indexDateA)
+    if(begT!=Sys.Date() || endT!=Sys.Date()){
+      reF <- QT_IndexValuation_subfunF(indexDateA)
+      re <- rbind(re,reF)
+    }
+
     dbWriteTable(con,'QT_IndexValuation',re,overwrite=FALSE,append=TRUE,row.names=FALSE)
   }
   dbDisconnect(con)
@@ -297,9 +330,10 @@ lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
 #' @export
 #' @examples
 #' re <- getIndexValuation()
-#' re <- getIndexValuation(caltype='median',begT = Sys.Date(),endT = Sys.Date())
-getIndexValuation <- function(valtype=c('PE','PB'),caltype=c('median','mean'),
-                  begT=as.Date('2005-01-04'),endT=Sys.Date()-1){
+#' #get newest valuation
+#' re <- getIndexValuation(begT = Sys.Date(),endT = Sys.Date())
+getIndexValuation <- function(valtype=c('PE','PB'),caltype='median',
+                  begT=as.Date('2001-01-04'),endT=Sys.Date()-1){
 
   if(begT==Sys.Date() && endT==Sys.Date()){
     lcdb.update.QT_IndexValuation(begT,endT)
@@ -478,6 +512,128 @@ getIndustryMA <- function(begT=as.Date('2005-01-04'),endT=Sys.Date()-1){
   odbcClose(con)
   return(indexScore)
 }
+
+
+#' index.rotation
+#'
+#' @examples
+#' indexID <-  CT_industryList(33,1)
+#' indexID <-  sectorID2indexID(indexID$IndustryID)
+#' re <- index.rotation(indexID)
+#' @export
+index.rotation <- function(indexID=c('EI000016','EI000905','EI000852'),begT=as.Date('2005-01-04'),
+                           endT=Sys.Date(),MApara=20,fee=0.001,sell_count=1){
+
+  rawdata <- getIndexQuote(indexID,begT = begT,endT = endT,variables = c('pre_close','open','close','pct_chg'),datasrc = 'jy')
+
+  # fill zz500 rawdata
+  if(begT<as.Date("2007-01-15") && 'EI000905' %in% indexID){
+    require(WindR)
+    w.start(showmenu = FALSE)
+    rawdata_ <- w.wsd("000905.SH","pre_close,open,close,pct_chg",begT,as.Date("2007-01-15"))[[2]]
+    rawdata_[is.na(rawdata_)] <- NA
+    rawdata_ <- rawdata_ %>% mutate(stockID='EI000905',PCT_CHG=PCT_CHG/100) %>% select(stockID,everything())
+    colnames(rawdata_) <- colnames(rawdata)
+    rawdata <- rawdata[!(rawdata$date<=as.Date("2007-01-15") & rawdata$stockID=='EI000905'),]
+    rawdata <- rbind(rawdata,rawdata_)
+    rawdata <- dplyr::arrange(rawdata,stockID,date)
+  }
+
+  #get MA data
+  indexClose <- reshape2::dcast(rawdata,date~stockID,value.var = 'close')
+  quoteMA <- apply(indexClose[,-1], 2, TTR::SMA, n=MApara)
+  quoteMA <- cbind(data.frame(date=as.Date(indexClose$date)),quoteMA)
+  quoteMA <- quoteMA[MApara:nrow(quoteMA),]
+  quoteMA <- reshape2::melt(quoteMA,id.vars='date',variable.name='stockID',value.name='MA')
+  quote <- dplyr::left_join(quoteMA,rawdata[,c("date","stockID","close")],by=c("date","stockID"))
+
+  #reshape index rtn
+  indexrtn <- rawdata %>% dplyr::group_by(stockID) %>%
+    dplyr::mutate(next_open=lead(open),pct_chg_buy=close/open-1-fee,
+                  pct_chg_sell=next_open/pre_close-1-fee) %>%
+    dplyr::ungroup() %>% dplyr::select(-next_open,-open,-pre_close,-close)
+
+
+  quote <- quote %>% mutate(tag=ifelse(close>MA,1,0),trade='')
+  for(j in indexID){
+    quote_ <- quote[quote$stockID==j,]
+    pos <- 0
+    ncount <- 0
+    for(i in 2:nrow(quote_)){
+      #buy
+      if(pos==0 && quote_[i-1,'tag']==1){
+        quote_[i,'trade'] <- 'buy'
+        pos <- 1
+        if(quote_[i,'tag']==0){
+          ncount <- 1
+        }
+        next
+      }
+
+      #hold
+      if(pos==1 && quote_[i,'tag']==1){
+        quote_[i,'trade'] <- 'hold'
+        next
+      }
+
+      #sell
+      if(pos==1 && quote_[i,'tag']==0){
+        if(quote_[i-1,'tag']!=0){
+          ncount <- 0
+        }
+        ncount <- ncount+1
+        if(ncount==sell_count){
+          quote_[i,'trade'] <- 'sell'
+          pos <- 0
+          ncount <- 0
+        }else{
+          quote_[i,'trade'] <- 'hold'
+        }
+      }# sell end
+    } # inner for loop end
+    quote <- quote[quote$stockID!=j,]
+    quote <- rbind(quote,quote_)
+  }
+
+  #reduct fee from index return
+  indexrtn_adj <- dplyr::left_join(quote,indexrtn,by=c('date','stockID'))
+  indexrtn_adj <- transform(indexrtn_adj,pct_chg=ifelse(trade=='buy',pct_chg_buy,ifelse(trade=='sell',pct_chg_sell,pct_chg)))
+  indexrtn_adj <- reshape2::dcast(indexrtn_adj,date~stockID,value.var = 'pct_chg')
+  indexrtn_adj <- transform(indexrtn_adj,cash=0)
+
+  #get daily wgt
+  wgt <- quote %>% mutate(trade=ifelse(trade %in% c('buy','sell','hold'),1,0)) %>% select(date,stockID,trade)
+  wgt_index <- wgt %>% arrange(date,stockID) %>% group_by(date) %>%
+    mutate(trade=trade/sum(trade)) %>% ungroup()
+  wgt_index[is.nan(wgt_index$trade),'trade'] <- 0
+  wgt_cash <- wgt_index %>% group_by(date) %>% summarise(trade=1-sum(trade)) %>% ungroup() %>%
+    mutate(stockID='cash') %>% select(date,stockID,trade)
+  wgt <- rbind(as.data.frame(wgt_index),as.data.frame(wgt_cash))
+  wgt <- reshape2::dcast(wgt,date~stockID,value.var = 'trade')
+  wgt <- wgt[,colnames(indexrtn_adj)]
+
+  wgt <- transform(wgt,tag=0)
+  for(i in 1:nrow(wgt)){
+    if(i==1){
+      wgt$tag[i] <- 1
+    }else{
+      if(!all(wgt[i,2:(ncol(wgt)-1)]==wgt[i-1,2:(ncol(wgt)-1)])){
+        wgt$tag[i] <- 1
+      }
+    }
+  }
+  wgt <- wgt[wgt$tag==1,]
+  wgt$tag <- NULL
+
+  wgt <- xts::xts(wgt[,-1],wgt[,1])
+  indexrtn_adj <- xts::xts(indexrtn_adj[,-1],order.by = indexrtn_adj[,1])
+  #get return
+  re <- Return.backtesting(indexrtn_adj,weights = wgt)
+  return(re)
+}
+
+
+
 
 
 # ===================== ~ get data  ====================

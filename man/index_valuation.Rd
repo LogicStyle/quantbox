@@ -12,8 +12,8 @@ lcdb.build.QT_IndexValuation(indexID = c("EI399006", "EI000933"),
 
 lcdb.update.QT_IndexValuation(begT, endT = Sys.Date() - 1)
 
-getIndexValuation(valtype = c("PE", "PB"), caltype = c("median", "mean"),
-  begT = as.Date("2005-01-04"), endT = Sys.Date() - 1)
+getIndexValuation(valtype = c("PE", "PB"), caltype = "median",
+  begT = as.Date("2001-01-04"), endT = Sys.Date() - 1)
 }
 \description{
 lcdb.build.QT_IndexValuation
@@ -24,7 +24,8 @@ lcdb.update.QT_IndexValuation
 lcdb.build.QT_IndexValuation()
 lcdb.update.QT_IndexValuation()
 re <- getIndexValuation()
-re <- getIndexValuation(caltype='median',begT = Sys.Date(),endT = Sys.Date())
+#get newest valuation
+re <- getIndexValuation(begT = Sys.Date(),endT = Sys.Date())
 }
 \author{
 Andrew Dow
