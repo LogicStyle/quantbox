@@ -53,7 +53,7 @@ bank.rotation <- function(begT,endT=Sys.Date()-1,chgBar=0.2,fee=0.003,
   rebDates <- getRebDates(begT,endT,rebFreq = 'day')
   TS <- getTS(rebDates,indexID = 'ES33480000')
   qr <- paste("select ID 'stockID',ListedDate from SecuMain where ID in",brkQT(unique(TS$stockID)))
-  ipo <- queryAndClose.dbi(db.local(),qr)
+  ipo <- queryAndClose.dbi(db.local('main'),qr)
   ipo$ListedDate <- intdate2r(ipo$ListedDate)
   TS <- left_join(TS,ipo,by='stockID')
   TS <- na.omit(TS)
@@ -160,9 +160,7 @@ lcdb.build.QT_IndexValuation<- function(indexID=c('EI399006','EI000933'),addInde
   indexDate <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
   indexDate <- transform(indexDate,begT=intdate2r(ifelse(begT<20050104,20050104,begT)),
                               endT=Sys.Date()-1)
-
-  con <- db.local()
-
+  con <- db.local('main')
   if(addIndex){
     old <- dbGetQuery(con,"select distinct indexID from QT_IndexValuation")
     indexID <- setdiff(indexID,c(old$indexID))
@@ -198,7 +196,7 @@ QT_IndexValuation_subfun <- function(indexDate){
               where s1.SecuCode in",brkQT(substr(indexDate$indexID,3,8)),
               " order by s1.SecuCode,l.InDate")
   indexComp <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
-  con <- db.local()
+  con <- db.local('main')
   dbWriteTable(con, name="amtao_tmp", value=indexComp, row.names = FALSE, overwrite = TRUE)
 
   #correct begT
@@ -287,7 +285,7 @@ QT_IndexValuation_subfunF <- function(indexDate){
                           caltype='median')
   indexValue <- left_join(indexValue,indexDate[,c('indexID','indexName')])
   indexValue <- indexValue[,c("indexID","indexName","date","value","valtype","caltype")]
-  return(indexvalue)
+  return(indexValue)
 }
 
 
@@ -299,7 +297,7 @@ QT_IndexValuation_subfunF <- function(indexDate){
 #' lcdb.update.QT_IndexValuation()
 #' @export
 lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
-  con <- db.local()
+  con <- db.local('main')
   if(missing(begT)){
     begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation")
     begT <- trday.nearby(intdate2r(begT$date),by=1)
@@ -315,7 +313,7 @@ lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
     indexDateF <- indexDate[stringr::str_sub(indexDate$indexID,-3,-1) %in% c('.GI','.HI'),]
     re <- QT_IndexValuation_subfun(indexDateA)
     if(begT!=Sys.Date() || endT!=Sys.Date()){
-      reF <- QT_IndexValuation_subfunF(indexDateA)
+      reF <- QT_IndexValuation_subfunF(indexDateF)
       re <- rbind(re,reF)
     }
 
@@ -339,7 +337,7 @@ getIndexValuation <- function(valtype=c('PE','PB'),caltype='median',
     lcdb.update.QT_IndexValuation(begT,endT)
   }
 
-  con <- db.local()
+  con <- db.local('main')
   qr <- paste("select * from QT_IndexValuation where date<=",rdate2int(endT),
               " and valtype in",brkQT(valtype)," and caltype in",brkQT(caltype),sep="")
   re <- dbGetQuery(con,qr)
@@ -1084,7 +1082,7 @@ resumeArbitrage <- function(begT,endT){
     odbcClose(con)
     lof.info$type <- c("LOF")
 
-    sf.info <- dbReadTable(db.local(), "SF_Info")
+    sf.info <- dbReadTable(db.local('main'), "SF_Info")
 
     fund.info <- sf.info[,c("MCode","MName","IndexCode","IndexName")]
     fund.info$MCode <- substr(fund.info$MCode,1,6)
@@ -1225,7 +1223,7 @@ resumeArbitrage <- function(begT,endT){
                   from SF_TimeSeries t,SF_Info i
                   where t.MCode=i.MCode and t.MCode in",tmp,
                   "and t.Date>=",rdate2int(tmp.begT))
-      con <- db.local()
+      con <- db.local('main')
       sf.size <- dbGetQuery(con,qr)
       dbDisconnect(con)
       colnames(sf.size) <- c("Code","Name","Date","Unit")
@@ -1459,7 +1457,7 @@ lcdb.update.CorpStockPool <- function(filenames){
                      'CheckOperator','HavePosition','ValidBeginDate','ValidEndDate','SecurityCate')
   all$stockID <- stringr::str_pad(all$stockID,6,pad = '0')
   all$stockID <- stringr::str_c('EQ',all$stockID,sep = '')
-  con <- db.local()
+  con <- db.local('main')
   dbWriteTable(con,'CT_CorpStockPool',all,overwrite=T,row.names=F)
   dbDisconnect(con)
 }
@@ -1590,7 +1588,7 @@ lcdb.build.Bond_ConBDExchangeQuote <- function(){
   strbvalue <- transform(strbvalue,date=rdate2int(date))
   cvbond <- left_join(cvbond,strbvalue,by=c('date','bondID'))
   cvbond <- transform(cvbond,strbPremiumRate=(ClosePrice/strbvalue-1)*100)
-  con <- db.local()
+  con <- db.local('main')
   dbWriteTable(con,'Bond_ConBDExchangeQuote',cvbond)
   dbDisconnect(con)
 }
@@ -1602,7 +1600,7 @@ lcdb.build.Bond_ConBDExchangeQuote <- function(){
 #' @examples
 #' lcdb.update.Bond_ConBDExchangeQuote()
 lcdb.update.Bond_ConBDExchangeQuote <- function(){
-  con <- db.local()
+  con <- db.local('main')
   begT <- dbGetQuery(con,"select max(date) from Bond_ConBDExchangeQuote")[[1]]
   begT <- intdate2r(begT)
   endT <- trday.nearest(Sys.Date()-1)

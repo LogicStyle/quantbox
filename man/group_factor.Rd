@@ -8,19 +8,28 @@
 \alias{gf.EARNINGYIELD}
 \alias{gf.VALUE}
 \alias{gf.OTHER}
+\alias{lcdb.build.CT_GroupFactorLists}
 \title{group factor}
 \usage{
-gf.SIZE(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.SIZE(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
 
-gf.GROWTH(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.GROWTH(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
 
-gf.TRADING(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.TRADING(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
 
-gf.EARNINGYIELD(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.EARNINGYIELD(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
 
-gf.VALUE(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.VALUE(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
 
-gf.OTHER(TS, refinePar = refinePar_default("scale"), FactorLists, wgt)
+gf.OTHER(TS, refinePar = refinePar_default(type = "scale", sectorAttr =
+  defaultSectorAttr()), FactorLists, wgt)
+
+lcdb.build.CT_GroupFactorLists()
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

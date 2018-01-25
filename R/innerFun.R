@@ -1,5 +1,5 @@
 buildSMB <- function(){
-  con <- db.local()
+  con <- db.local('main')
   qr <- paste("select * from SecuMain where ID='EI000985'")
   re <- dbGetQuery(con,qr)
   dbDisconnect(con)
@@ -62,7 +62,7 @@ buildSMB <- function(){
   rtn$date <- rdate2int(rtn$date)
   rtn <- rtn[,c('date','stockID','factorName','factorScore')]
 
-  con <- db.local()
+  con <- db.local('main')
   if(dbExistsTable(con,'QT_FactorScore_amtao')){
     dbWriteTable(con,'QT_FactorScore_amtao',rtn,overwrite=F,append=T)
   }else{
@@ -75,7 +75,7 @@ buildSMB <- function(){
 
 
 buildHML <- function(){
-  con <- db.local()
+  con <- db.local('main')
   qr <- paste("select * from SecuMain where ID='EI000985'")
   re <- dbGetQuery(con,qr)
   dbDisconnect(con)
@@ -139,7 +139,7 @@ buildHML <- function(){
   rtn <- rtn[,c('date','stockID','factorName','factorScore')]
 
 
-  con <- db.local()
+  con <- db.local('main')
   if(dbExistsTable(con,'QT_FactorScore_amtao')){
     dbWriteTable(con,'QT_FactorScore_amtao',rtn,overwrite=F,append=T)
   }else{
@@ -154,7 +154,7 @@ buildHML <- function(){
 lcdb.update.FF3 <- function(){
 
   update.SMB <- function(){
-    con <- db.local()
+    con <- db.local('main')
     begT <- dbGetQuery(con,"select max(date) 'endDate' from QT_FactorScore_amtao where factorName='SMB'")[[1]]
     dbDisconnect(con)
     begT <- trday.nearby(intdate2r(begT),by = 1)
@@ -222,13 +222,13 @@ lcdb.update.FF3 <- function(){
     rtn$date <- rdate2int(rtn$date)
     rtn <- rtn[,c('date','stockID','factorName','factorScore')]
 
-    con <- db.local()
+    con <- db.local('main')
     dbWriteTable(con,'QT_FactorScore_amtao',rtn,overwrite=F,append=T)
     dbDisconnect(con)
   }
 
   update.HML <- function(){
-    con <- db.local()
+    con <- db.local('main')
     begT <- dbGetQuery(con,"select max(date) 'endDate' from QT_FactorScore_amtao where factorName='HML'")[[1]]
     dbDisconnect(con)
     begT <- trday.nearby(intdate2r(begT),by = 1)
@@ -297,12 +297,12 @@ lcdb.update.FF3 <- function(){
     rtn <- rtn[,c('date','stockID','factorName','factorScore')]
 
 
-    con <- db.local()
+    con <- db.local('main')
     dbWriteTable(con,'QT_FactorScore_amtao',rtn,overwrite=F,append=T)
     dbDisconnect(con)
   }
 
-  con <- db.local()
+  con <- db.local('main')
   qr <- paste("select * from SecuMain where ID='EI000985'")
   re <- dbGetQuery(con,qr)
   dbDisconnect(con)
@@ -342,42 +342,9 @@ gf.F_ROE_new <- function(TS){
 
 
 
-rmSuspend.nextday <- function(TS){
-
-  con <- db.local()
-  TS$tmpdate <- trday.nearby(TS$date,by=1)
-  TS$tmpdate <- rdate2int(TS$tmpdate)
-  dbWriteTable(con,'yrf_tmp',TS[,c('tmpdate','stockID')],overwrite=T,append=F,row.names=F)
-  qr <- "SELECT * FROM yrf_tmp y
-  LEFT JOIN QT_UnTradingDay u
-  ON y.tmpdate=u.TradingDay and y.stockID=u.ID"
-  re <- dbGetQuery(con,qr)
-  re <- re[is.na(re$ID),c("tmpdate","stockID")]
-  re$flag <- 1
-  re <- dplyr::left_join(TS,re,by=c('tmpdate','stockID'))
-  re <- re[!is.na(re$flag),c('date','stockID')]
-
-  dbDisconnect(con)
-  return(re)
-}
 
 
 
-rmSuspend.today <- function(TS){
-
-  con <- db.local()
-  TS$date <- rdate2int(TS$date)
-  dbWriteTable(con,'yrf_tmp',TS,overwrite=T,append=F,row.names=F)
-  qr <- "SELECT * FROM yrf_tmp y
-  LEFT JOIN QT_UnTradingDay u
-  ON y.date=u.TradingDay and y.stockID=u.ID"
-  re <- dbGetQuery(con,qr)
-  re <- re[is.na(re$ID),c("date","stockID")]
-  re$date <- intdate2r(re$date)
-
-  dbDisconnect(con)
-  return(re)
-}
 
 
 
@@ -427,7 +394,7 @@ rmNegativeEvents.PPUnFrozen <- function(TS,bar=5){
 #' lcfs.update.amtao()
 lcfs.update.amtao <- function(factorFun,factorPar,factorDir,factorID,begT,endT,splitNbin) {
 
-  con <- db.local()
+  con <- db.local('fs')
 
   loopT <- dbGetQuery(con,"select distinct tradingday from QT_FactorScore order by tradingday")[[1]]
   loopT <- loopT[loopT>=rdate2int(begT) & loopT<=rdate2int(endT)]
@@ -477,7 +444,7 @@ andrew_lcdb.update.LC_RptDate<-function(){
   tb.from <- tb.from %>% group_by(stockID) %>% mutate(PublDate_next=lead(PublDate))
   tb.from <- tb.from[,c("stockID","CompanyCode","EndDate","PublDate","PublDate_next","UpdateTime")]
 
-  con <- db.local()
+  con <- db.local('main')
   dbWriteTable(con,"LC_RptDate",tb.from,overwrite=TRUE,append=FALSE,row.names=FALSE)
   dbSendQuery(con,"CREATE UNIQUE INDEX [IX_LC_RptDate] ON [LC_RptDate] ([stockID], [PublDate], [EndDate])")
   dbDisconnect(con)

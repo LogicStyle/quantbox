@@ -53,7 +53,7 @@ table.factor.summary <- function(TSFR,N=10,fee=0.001){
 #' @examples
 #' lcdb.add.QT_IndexQuote("EI000852")
 lcdb.add.QT_IndexQuote <- function(indexID){
-  con <- db.local()
+  con <- db.local('main')
   date <- dbGetQuery(con,"select min(TradingDay) 'begT',max(TradingDay) 'endT' from QT_IndexQuote")
   begT <- intdate2r(date$begT)
   endT <- intdate2r(date$endT)
@@ -191,7 +191,7 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
     TStmp <- TS
     TStmp$date <- rdate2int(TStmp$date)
   }
-  con <- db.local()
+  con <- db.local('qt')
   qr <- paste("SELECT u.TradingDay 'date',u.ID 'stockID',u.DailyReturn
           FROM QT_DailyQuote u
           where u.TradingDay in",paste("(",paste(unique(TStmp$date),collapse = ","),")"))
@@ -209,6 +209,62 @@ rmPriceLimit <- function(TS,dateType=c('nextday','today'),priceType=c('upLimit',
 
 }
 
+
+#' lcdb.update.QT_IndexQuoteamtao
+#'
+#' @export
+lcdb.update.QT_IndexQuoteamtao <- function(begT,endT,IndexID,datasrc='quant'){
+  con <- db.local('main')
+  if(missing(begT)){
+    if(missing(IndexID)){
+      begT <- dbGetQuery(con,"select max(TradingDay) from QT_IndexQuote")[[1]]
+    } else {
+      begT <- dbGetQuery(con,"select min(TradingDay) from QT_IndexQuote")[[1]]
+    }
+  }
+
+  if(missing(endT)){
+    if(missing(IndexID)){
+      endT <- rdate2int(Sys.Date())
+    } else {
+      endT <- dbGetQuery(con,"select max(TradingDay) from QT_IndexQuote")[[1]]
+    }
+  }
+
+  begT_filt <- paste("TradingDay >=",begT)
+  endT_filt <- paste("TradingDay < ",endT)
+
+  if(missing(IndexID)){
+    pool_filt <- "1>0"
+  } else{
+    pool_filt <- paste("ID in",brkQT(IndexID))
+  }
+
+  if(datasrc=='quant'){
+    tb.from <- queryAndClose.odbc(db.quant(),query=paste("select * from QT_IndexQuote where ",begT_filt,"and",endT_filt,"and",pool_filt))
+  }else if(datasrc=='jy'){
+    begT_filt_ <- paste("TradingDay >=",QT(intdate2r(begT)))
+    endT_filt_ <- paste("TradingDay < ",QT(intdate2r(endT)))
+    IndexID_ <- stringr::str_replace(IndexID,'EI','')
+    pool_filt_ <- paste("SecuCode in",brkQT(IndexID_))
+    qr <- paste("SELECT q.InnerCode,
+                year(TradingDay)*10000+month(TradingDay)*100+day(TradingDay) 'TradingDay',
+                PrevClosePrice,OpenPrice,HighPrice,LowPrice,ClosePrice,TurnoverVolume,
+                TurnoverValue,TurnoverDeals,ChangePCT,NegotiableMV,
+                (case when PrevClosePrice is not null and PrevClosePrice <> 0 then ClosePrice/PrevClosePrice-1 else null end) 'DailyReturn',
+                'EI'+s.SecuCode 'ID'
+                FROM QT_IndexQuote q,SecuMain s
+                where q.InnerCode=s.InnerCode and ",begT_filt_,"and",endT_filt_,"and",pool_filt_)
+    tb.from <- queryAndClose.odbc(db.jy(),query=qr)
+  }
+
+  if(NROW(tb.from)==0){
+    return()
+  }
+  dbGetQuery(con,paste("delete from QT_IndexQuote where",begT_filt,"and",endT_filt,"and",pool_filt))
+  dbWriteTable(con,"QT_IndexQuote",tb.from,overwrite=FALSE,append=TRUE,row.names=FALSE)
+  dbDisconnect(con)
+}
 
 
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
@@ -520,14 +576,14 @@ group_factor_subfun <- function(TS,factorType,refinePar,FactorLists,wgt){
 
 #' @rdname group_factor
 #' @export
-gf.SIZE <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.SIZE <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,factorType="SIZE",refinePar,FactorLists,wgt)
 }
 
 
 #' @rdname group_factor
 #' @export
-gf.GROWTH <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.GROWTH <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,"GROWTH",refinePar,FactorLists,wgt)
 }
 
@@ -535,26 +591,26 @@ gf.GROWTH <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
 
 #' @rdname group_factor
 #' @export
-gf.TRADING <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.TRADING <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,"TRADING",refinePar,FactorLists,wgt)
 }
 
 #' @rdname group_factor
 #' @export
-gf.EARNINGYIELD <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.EARNINGYIELD <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,"EARNINGYIELD",refinePar,FactorLists,wgt)
 }
 
 #' @rdname group_factor
 #' @export
-gf.VALUE <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.VALUE <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,"VALUE",refinePar,FactorLists,wgt)
 }
 
 
 #' @rdname group_factor
 #' @export
-gf.OTHER <- function(TS,refinePar=refinePar_default('scale'),FactorLists,wgt){
+gf.OTHER <- function(TS,refinePar=refinePar_default(type = 'scale',sectorAttr = defaultSectorAttr()),FactorLists,wgt){
   re <- group_factor_subfun(TS,"OTHER",refinePar,FactorLists,wgt)
 }
 
@@ -601,9 +657,9 @@ gf.liquidityold <- function(TS,nwin=22){
   begT <- trday.nearby(min(TS$date),-nwin)
   endT <- max(TS$date)
 
-  conn <- db.local()
+  conn <- db.local(dbname = 'qt')
   qr <- paste("select t.TradingDay ,t.ID 'stockID',t.TurnoverVolume/10000 'TurnoverVolume',t.NonRestrictedShares
-              from QT_DailyQuote2 t where ID in",brkQT(unique(TS$stockID)),
+              from QT_DailyQuote t where ID in",brkQT(unique(TS$stockID)),
               " and t.TradingDay>=",rdate2int(begT),
               " and t.TradingDay<",rdate2int(endT))
   rawdata <- RSQLite::dbGetQuery(conn,qr)
@@ -688,7 +744,73 @@ gf.ca_ratio <- function(TS,fintype=c('PE','PB','PCF'),N=5,inflaAdj=FALSE){
   return(TSF)
 }
 
-
+#' @rdname group_factor
+#' @export
+lcdb.build.CT_GroupFactorLists <- function(){
+  gfconst <- rbind(tibble::tibble(factorType="SIZE",
+                                  groupFun="gf.SIZE",
+                                  groupDesc="",
+                                  factorFun=c("gf.ln_mkt_cap","gf.free_float_sharesMV","gf.nl_size"),
+                                  factorPar=c("","",""),
+                                  factorDir=c(-1,-1,-1),
+                                  factorName=c("ln_mkt_cap_","free_float_sharesMV_","nl_size_"),
+                                  factorDesc=c("","",""),
+                                  wgt=c(0.4,0.4,0.2)),
+                   tibble::tibble(factorType="GROWTH",
+                                  groupFun="gf.GROWTH",
+                                  groupDesc="",
+                                  factorFun=c("gf.NP_YOY","gf.G_OR_longterm","gf.F_NP_chg","gf.F_rank_chg"),
+                                  factorPar=c("","",'span="w13",con_type="1,2"','lag=60,con_type="1,2"'),
+                                  factorDir=c(1,1,1,1),
+                                  factorName=c("NP_YOY","G_OR_longterm","F_NP_chg_w13","F_rank_chg_60"),
+                                  factorDesc=c("","","",""),
+                                  wgt=c(0.5,0.1,0.2,0.2)),
+                   tibble::tibble(factorType="TRADING",
+                                  groupFun="gf.TRADING",
+                                  groupDesc="",
+                                  factorFun=c("gf.liquidity","gf.pct_chg_per","gf.volatility","gf.beta","gf.F_target_rtn"),
+                                  factorPar=c("","N=60","","",'con_type="1,2"'),
+                                  factorDir=c(-1,-1,-1,-1,1),
+                                  factorName=c("liquidity_","pct_chg_per_60_","volatility_","beta_","F_target_rtn"),
+                                  factorDesc=c("","","","",""),
+                                  wgt=c(0.2,0.4,0.1,0.1,0.2)),
+                   tibble::tibble(factorType="EARNINGYIELD",
+                                  groupFun="gf.EARNINGYIELD",
+                                  groupDesc="",
+                                  factorFun=c("gf.ROE_ttm","gf.pio_f_score"),
+                                  factorPar=c("",""),
+                                  factorDir=c(1,1),
+                                  factorName=c("ROE_ttm","pio_f_score"),
+                                  factorDesc=c("",""),
+                                  wgt=c(0.2,0.8)),
+                   tibble::tibble(factorType="VALUE",
+                                  groupFun="gf.VALUE",
+                                  groupDesc="",
+                                  factorFun=c("gf.BP_mrq","gf.EP_ttm","gf.dividendyield"),
+                                  factorPar=c("","",""),
+                                  factorDir=c(1,1,1),
+                                  factorName=c("BP_mrq","EP_ttm","dividendyield"),
+                                  factorDesc=c("","",""),
+                                  wgt=c(0.4,0.3,0.3)),
+                   tibble::tibble(factorType="OTHER",
+                                  groupFun="gf.OTHER",
+                                  groupDesc="",
+                                  factorFun=c("gf.momentum","gf.IVR","gf.disposition","gf.ILLIQ"),
+                                  factorPar=c("","","",""),
+                                  factorDir=c(1,-1,-1,1),
+                                  factorName=c("momentum","IVR_","disposition_","ILLIQ"),
+                                  factorDesc=c("","","",""),
+                                  wgt=c(0.1,0.3,0.3,0.3)))
+  gfconst <- as.data.frame(gfconst)
+  con <- db.local('main')
+  if(dbExistsTable(con,"CT_GroupFactorLists")){
+    dbWriteTable(con,"CT_GroupFactorLists",gfconst,overwrite=TRUE,append=FALSE)
+  }else{
+    dbWriteTable(con,"CT_GroupFactorLists",gfconst)
+  }
+  dbDisconnect(con)
+  return("Done!")
+}
 
 
 
@@ -704,7 +826,7 @@ gf.ca_ratio <- function(TS,fintype=c('PE','PB','PCF'),N=5,inflaAdj=FALSE){
 #' @examples
 #' CT_GroupFactorLists()
 CT_GroupFactorLists <- function(){
-  con <- db.local()
+  con <- db.local('main')
   re <- dbReadTable(con,"CT_GroupFactorLists")
   dbDisconnect(con)
   return(re)
@@ -818,6 +940,72 @@ expandTS2TSF <- function(TS,nwin,rawdata){
   result <- na.omit(result)
   result <- dplyr::arrange(result,date,stockID,TradingDay)
   return(result)
+}
+
+#' TSFR.rptTSF_nextF
+#'
+#' @param funchar can be missing when ... arguments are passed.
+#' @param ... argument for \code{\link[QDataGet]{getTSF}}.
+#' @return a \bold{TSFR} object,\code{date_end} represents next report date,\code{factorscore} represents factorscore of next report date.
+#' @examples
+#' begT <- as.Date("2007-12-31")
+#' endT <- as.Date("2017-12-31")
+#' freq <- "y"
+#' univ <- "EI000985"
+#' funchar <- '"factorscore",reportofall(9900100,RDate)' #ROE
+#' funchar <- '"factorscore",reportofall(9900604,RDate)' #growth of net profit
+#' funchar <- '"factorscore",reportofall(9900501,RDate)' #divdendyield
+#' refinePar <- refinePar_default(type="scale",sectorAttr=NULL)
+#' refinePar <- refinePar_default(type="scale",sectorAttr=defaultSectorAttr())
+#' TSFR <- TSFR.rptTSF_nextF(begT,endT,freq,univ,funchar,refinePar)
+#' TSFR <- TSFR.rptTSF_nextF(begT,endT,freq,univ,refinePar=refinePar,factorFun='gf.PB_mrq', factorPar = list(fillna = TRUE))
+#' @export
+TSFR.rptTSF_nextF <- function(begT=as.Date("2007-12-31"),endT=as.Date("2016-12-31"),
+                              freq='y',univ,funchar,refinePar=refinePar_default(),...){
+
+  #get report TS
+  rptDates <- rptDate.get(begT,endT,freq)
+  rptTS <- getrptTS(univ=univ,rptDates=rptDates)
+  rptTS <- rptDate.publ(rptTS)
+  rptTS <- rptTS %>% dplyr::filter(!is.na(PublDate)) %>% dplyr::select(-PublDate)
+
+  #get report TSF and refine
+  if(missing(funchar)){
+    TS <- rptTS %>% dplyr::rename(date=rptDate)
+    rptTSF <- getTSF(TS,...)
+    rptTSF <- rptTSF %>% dplyr::rename(rptDate=date)
+  }else{
+    rptTSF <- rptTS.getFin_ts(rptTS,funchar)
+  }
+  TSF <- rptTSF %>% dplyr::rename(date=rptDate)
+  TSF <- factor_refine(TSF,refinePar)
+  TSF <- TSF %>% dplyr::filter(!is.na(factorscore))
+
+  #get next period factorscore and refine
+  rptTS_ <- transform(rptTS,rptDate_end=rptDate.offset(rptDate,1,freq))
+  rptTS2 <- rptTS_ %>% dplyr::select(rptDate_end,stockID) %>%
+    dplyr::rename(rptDate=rptDate_end) %>% dplyr::setdiff(rptTS)
+  if(nrow(rptTS2)>0){
+    rptTS2 <- rptDate.publ(rptTS2)
+    rptTS2 <- rptTS2 %>% dplyr::filter(!is.na(PublDate)) %>% dplyr::select(-PublDate)
+    if(missing(funchar)){
+      TS2 <- rptTS2 %>% dplyr::rename(date=rptDate)
+      rptTSF2 <- getTSF(TS2,...)
+      rptTSF2 <- rptTSF2 %>% dplyr::rename(rptDate=date)
+    }else{
+      rptTSF2 <- rptTS.getFin_ts(rptTS2,funchar)
+    }
+    rptTSF <- rbind(rptTSF,rptTSF2)
+  }
+  TSF2 <- rptTSF %>% dplyr::arrange(rptDate,stockID) %>% dplyr::rename(date=rptDate)
+  TSF2 <- factor_refine(TSF2,refinePar)
+  TSF2 <- TSF2 %>% dplyr::filter(!is.na(factorscore)) %>% dplyr::rename(date_end=date,periodrtn=factorscore)
+
+  #get TSFR
+  rptTS_ <- rptTS_ %>% dplyr::rename(date=rptDate,date_end=rptDate_end)
+  TSFR <- TSF %>% dplyr::left_join(rptTS_,by=c('date','stockID')) %>%
+    dplyr::left_join(TSF2,by=c('date_end','stockID'))
+  return(TSFR)
 }
 
 
