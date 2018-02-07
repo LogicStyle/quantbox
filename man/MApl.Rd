@@ -4,7 +4,7 @@
 \alias{MApl}
 \title{MApl}
 \usage{
-MApl(TS, type = c("IsDtpl", "IsKtpl"), MA = c(10, 20, 120, 250))
+MApl(TS, type = c("IsDtpl", "IsKtpl"), MA = c(5, 10, 20, 60, 120, 250))
 }
 \description{
 MApl

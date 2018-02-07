@@ -918,14 +918,23 @@ reg.factorlists_recommend <- function(indexID,begT,endT,rebFreq = "month",rsqBar
 #' @examples
 #' TSF <- MApl(TS)
 #' TSF <- MApl(TS,type='IsKtpl')
-MApl <- function(TS,type=c('IsDtpl','IsKtpl'),MA=c(10,20,120,250)){
+MApl <- function(TS,type=c('IsDtpl','IsKtpl'),MA=c(5,10,20,60,120,250)){
   type <- match.arg(type)
+  qr <- paste("MA(Close(),",paste0(MA,sep =')'),sep = "")
+  TS_ <- rm_suspend(TS,nearby = 0)
+  TSF <- TS.getTech_ts(TS_, funchar = qr)
+  TSF_ <- tidyr::gather(TSF,key='N',value='MA',-date,-stockID)
+  TSF_ <- dplyr::mutate(TSF_,N=as.numeric(stringr::str_extract(N,"[0-9]+")))
+  TSF_ <- TSF_ %>% arrange(date,stockID,N) %>% group_by(date,stockID) %>% mutate(MAlead=lead(MA))
   if(type=='IsDtpl'){
-    qr <- paste("IsDtpl(",paste(MA,collapse = ","),")",sep="")
+    TSF_ <- TSF_ %>% summarise(factorscore=sum(MA>MAlead,na.rm = TRUE)) %>%
+      mutate(factorscore=ifelse(factorscore==length(MA)-1,1,0))
   }else{
-    qr <- paste("IsKtpl(",paste(MA,collapse = ","),")",sep="")
+    TSF_ <- TSF_ %>% summarise(factorscore=sum(MA<MAlead,na.rm = TRUE)) %>%
+      mutate(factorscore=ifelse(factorscore==length(MA)-1,1,0))
   }
-  TSF <- TS.getTech_ts(TS, funchar = qr, varname = "dtpl")
+  TSF <- left_join(TS,TSF_,by=c('date','stockID'))
+  TSF[is.na(TSF$factorscore),'factorscore'] <- 0
   return(TSF)
 }
 
