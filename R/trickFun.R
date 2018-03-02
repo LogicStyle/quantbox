@@ -1497,7 +1497,7 @@ db.ts <- function(){
 #' @param endT is end date, default value is \bold{today}.
 #' @param scale is number of periods in a year,default value is 250.
 #' @examples
-#' te <- fund_exrtn_terr(fundID='162411.OF',begT=as.Date('2013-06-28'))
+#' te <- fund_exrtn_terr(fundID='100038.OF',begT=as.Date('2013-06-28'))
 #' te <- fund_exrtn_terr(fundID=c('162411.OF','501018.OF'),begT=as.Date('2016-06-04'))
 #' @export
 fund_exrtn_terr <- function(fundID,begT,endT=Sys.Date(),freq=NULL,scale=250){
@@ -1567,6 +1567,127 @@ fund_exrtn_terr <- function(fundID,begT,endT=Sys.Date(),freq=NULL,scale=250){
   return(result)
 }
 
+fnav.summary <- function(fundID,begT,endT,bmk,scale=250,...){
+  require(WindR)
+  WindR::w.start(showmenu = F)
+
+  if(missing(endT)){
+    endT <- trday.nearby(Sys.Date(),-1)
+  }
+
+  if(missing(begT)){
+    #get fund's setup date
+    f_setup_date <- w.wss(fundID,'fund_setupdate')[[2]]
+    f_setup_date <- f_setup_date %>% rename(fundID=CODE,setupdate=FUND_SETUPDATE) %>%
+      mutate(setupdate=w.asDateTime(setupdate,asdate = TRUE))
+
+    f_info <- data.frame(fundID=fundID,begT=f_setup_date$setupdate,endT=endT,
+                         stringsAsFactors = FALSE)
+  }else{
+    f_info <- data.frame(fundID=fundID,begT=begT,endT=endT,
+                         stringsAsFactors = FALSE)
+  }
+
+  fundnav <- MF_getQuote(fundID = f_info$fundID, begT = begT, endT = max(dates$endT), variables = "NAV_adj_return1")
+
+
+  innerte <- function(tsobj,scale){
+    TrackingError <-  sqrt(sum(tsobj^2) / (length(tsobj) - 1)) * sqrt(scale)
+    return(TrackingError)
+  }
+
+  result <- data.frame()
+  for(i in 1:nrow(df)){
+    fundts <-w.wsd(df$fundID[i],"NAV_adj_return1",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
+    tmp <- w.wss(df$fundID[i],'fund_benchindexcode')[[2]]
+    benchts <-w.wsd(tmp$FUND_BENCHINDEXCODE,"pct_chg",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
+    allts <- merge(fundts,benchts,by='DATETIME')
+    allts <- na.omit(allts)
+    allts <- transform(allts,NAV_ADJ_RETURN1=NAV_ADJ_RETURN1/100,PCT_CHG=PCT_CHG/100)
+    allts <- xts::xts(allts[,-1],order.by = allts[,1])
+
+    rtn <- rtn.summary(allts)
+    result <- rbind(result,data.frame(fundID=df$fundID[i],
+                                      begT=df$begT[i],
+                                      endT=df$endT[i],
+                                      fundrtn=rtn[1,1],
+                                      benchrtn=rtn[1,2],
+                                      exrtn=rtn[1,1]-rtn[1,2],
+                                      te=innerte(allts[,1]-allts[,2],scale = scale)))
+
+
+
+  }
+  return(result)
+}
+
+
+fnav.periods <- function(fundID,begT,endT=Sys.Date(),freq='year',bmk=NULL,scale=250,fnavdf){
+  require(WindR)
+  WindR::w.start(showmenu = F)
+
+  setupdate<-w.wss(fundID,'fund_setupdate')[[2]]
+  setupdate <- w.asDateTime(setupdate$FUND_SETUPDATE,asdate = T)
+
+  if(missing(begT)){
+    df <- data.frame(fundID=fundID,begT=setupdate,endT=endT)
+  }else{
+    df <- data.frame(fundID=fundID,begT=begT,endT=endT)
+    df[,'begT'] <- ifelse(df$begT<setupdate,setupdate,df$begT)
+    df$begT <- as.Date(df$begT,origin='1970-01-01')
+  }
+  result <- data.frame()
+
+  innerte <- function(tsobj,scale){
+    TrackingError <-  sqrt(sum(tsobj^2) / (length(tsobj) - 1)) * sqrt(scale)
+    return(TrackingError)
+  }
+
+  for(i in 1:nrow(df)){
+    fundts <-w.wsd(df$fundID[i],"NAV_adj_return1",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
+    tmp <- w.wss(df$fundID[i],'fund_benchindexcode')[[2]]
+    benchts <-w.wsd(tmp$FUND_BENCHINDEXCODE,"pct_chg",df$begT[i],df$endT[i],"Fill=Previous")[[2]]
+    allts <- merge(fundts,benchts,by='DATETIME')
+    allts <- na.omit(allts)
+    allts <- transform(allts,NAV_ADJ_RETURN1=NAV_ADJ_RETURN1/100,PCT_CHG=PCT_CHG/100)
+    allts <- xts::xts(allts[,-1],order.by = allts[,1])
+
+
+    if(is.null(freq)){
+      rtn <- rtn.summary(allts)
+      result <- rbind(result,data.frame(fundID=df$fundID[i],
+                                        begT=df$begT[i],
+                                        endT=df$endT[i],
+                                        fundrtn=rtn[1,1],
+                                        benchrtn=rtn[1,2],
+                                        exrtn=rtn[1,1]-rtn[1,2],
+                                        te=innerte(allts[,1]-allts[,2],scale = scale)))
+
+    }else{
+      from <- unique(cut.Date2(zoo::index(allts),freq,lab.side="begin"))
+      to <- unique(cut.Date2(zoo::index(allts),freq,lab.side="end"))
+      rtn <- zoo::as.zoo(allts)
+      # ---- periods cumulative rtn
+      table.periods <- timeSeries::fapply(timeSeries::as.timeSeries(rtn),from,to,FUN=PerformanceAnalytics::Return.annualized)
+      table.periods <- as.data.frame(table.periods)
+      table.periods <- cbind(table.periods,exrtn=table.periods[,1]-table.periods[,2])
+
+
+      rtn <- rtn[,1]-rtn[,2]
+      te.periods <- timeSeries::fapply(timeSeries::as.timeSeries(rtn),from,to,FUN=innerte,scale=scale)
+      te.periods <- as.data.frame(te.periods)
+      table.periods <- cbind(table.periods,te.periods)
+      colnames(table.periods) <- c('fundrtn','benchrtn','exrtn','te')
+      result <- rbind(result,data.frame(fundID=df$fundID[i],
+                                        begT=from,
+                                        endT=to,
+                                        table.periods))
+
+    }
+
+  }
+  return(result)
+}
 
 
 
@@ -1691,7 +1812,13 @@ getIndexBasicInfo <- function(indexID) {
 }
 
 
-
+#' lcdb.build.Bond_ConBDExchangeQuote
+#'
+#' @name cbondfuns
+#' @export
+#' @examples
+#' lcdb.build.Bond_ConBDExchangeQuote()
+#' lcdb.update.Bond_ConBDExchangeQuote()
 lcdb.build.Bond_ConBDExchangeQuote <- function(){
   qr <- "select convert(varchar,cb.TradingDay,112) 'date',
   case c.SecuMarket
@@ -1701,16 +1828,42 @@ lcdb.build.Bond_ConBDExchangeQuote <- function(){
   cb.BondNature,cb.Maturity,cb.YrMat,cb.ClosePrice,cb.ChangePCT,cb.TurnoverRate,cb.TurnoverValue
   ,cb.NewConvetPrice,cb.StockPrice,cb.ConvertPremiumRate
   from Bond_ConBDExchangeQuote cb
-  left JOIN Bond_Code c on cb.InnerCode=c.InnerCode
+  INNER JOIN Bond_Code c on cb.InnerCode=c.InnerCode and c.BondNature in(10,29)
   where cb.TradingDay>='2005-01-01' and cb.YrMat is not NULL
+  and cb.BondNature in(1,4)
   order by cb.TradingDay,c.SecuCode"
-  cvbond <- queryAndClose.odbc(db.jy(),qr)
+  cvbond <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors =FALSE)
 
-  cvstat <- cvbond %>% filter(BondNature %in% c(1,4)) %>% group_by(bondID) %>%
-    summarise(begT=min(date),endT=max(date)) %>% ungroup() %>% mutate(begT=intdate2r(begT),endT=intdate2r(endT))
-  strbvalue <- data.frame()
   require(WindR)
   w.start(showmenu = FALSE)
+
+  #fix bugs to do
+  cvbugs <- cvbond %>% filter(is.na(ConvertPremiumRate))
+  if(nrow(cvbugs)>0){
+    cvbugsbond <- cvbugs %>% group_by(bondID) %>%
+      summarise(begT=intdate2r(min(date)),endT=intdate2r(max(date)))
+    ConvetPrice <- data.frame(stringsAsFactors = FALSE)
+    for(i in 1:nrow(cvbugsbond)){
+      ConvetPrice_ <- w.wsd(cvbugsbond$bondID[i],'clause_conversion2_swapshareprice',cvbugsbond$begT[i],cvbugsbond$endT[i])[[2]]
+      ConvetPrice_ <- ConvetPrice_ %>% mutate(bondID=as.character(cvbugsbond$bondID[i]),DATETIME=rdate2int(DATETIME)) %>%
+        rename(date=DATETIME,NewConvetPrice=CLAUSE_CONVERSION2_SWAPSHAREPRICE) %>%
+        select(date,bondID,NewConvetPrice)
+      ConvetPrice <- rbind(ConvetPrice,ConvetPrice_)
+    }
+    cvbugs <- cvbugs %>% select(-NewConvetPrice) %>%
+      left_join(ConvetPrice,by=c('date','bondID')) %>%
+      mutate(ConvertPremiumRate=(ClosePrice/(StockPrice/NewConvetPrice*100)-1)*100)
+    cvbugs <- cvbugs[,colnames(cvbond)]
+    cvbond <- cvbond %>% filter(!is.na(ConvertPremiumRate)) %>%
+      bind_rows(cvbugs) %>% arrange(date,bondID)
+
+  }
+
+  #add data
+  cvstat <- cvbond %>% group_by(bondID) %>% summarise(begT=min(date),endT=max(date)) %>%
+    ungroup() %>% mutate(begT=intdate2r(begT),endT=intdate2r(endT))
+  strbvalue <- data.frame()
+
   for(i in 1:nrow(cvstat)){
     data <- w.wsd(cvstat$bondID[i],"strbvalue",cvstat$begT[i],cvstat$endT[i])[[2]]
     data <- rename(data,date=DATETIME,strbvalue=STRBVALUE)
@@ -1721,6 +1874,9 @@ lcdb.build.Bond_ConBDExchangeQuote <- function(){
   cvbond <- left_join(cvbond,strbvalue,by=c('date','bondID'))
   cvbond <- transform(cvbond,strbPremiumRate=(ClosePrice/strbvalue-1)*100)
   con <- db.local('main')
+  if(dbExistsTable(con,"Bond_ConBDExchangeQuote")){
+    dbRemoveTable(con,"Bond_ConBDExchangeQuote")
+  }
   dbWriteTable(con,'Bond_ConBDExchangeQuote',cvbond)
   dbDisconnect(con)
 }
@@ -1728,9 +1884,8 @@ lcdb.build.Bond_ConBDExchangeQuote <- function(){
 
 #' lcdb.update.Bond_ConBDExchangeQuote
 #'
+#' @rdname cbondfuns
 #' @export
-#' @examples
-#' lcdb.update.Bond_ConBDExchangeQuote()
 lcdb.update.Bond_ConBDExchangeQuote <- function(){
   con <- db.local('main')
   begT <- dbGetQuery(con,"select max(date) from Bond_ConBDExchangeQuote")[[1]]
