@@ -611,36 +611,29 @@ LLT <- function(indexID='EI000300',begT=as.Date('2005-01-04'),d=60,trancost=0.00
 #' re <- getIndustryMA(begT=as.Date('2014-01-04'))
 #' @export
 getIndustryMA <- function(begT=as.Date('2005-01-04'),endT=Sys.Date()-1){
-  con <- db.jy()
-  qr <- "select 'EI'+s.SecuCode 'stockID',s.SecuAbbr 'stockName',
-  c.DM 'industryCode',c.MS 'industryName'
+  qr <- "select 'EI'+s.SecuCode 'stockID',c.MS 'industryName'
   from LC_CorrIndexIndustry l,SecuMain s,CT_SystemConst c
-  where l.IndustryStandard=24 and s.SecuMarket=83
+  where l.IndustryStandard=24 and s.SecuMarket=83 and s.SecuCode like '80%'
   and l.IndexCode=s.InnerCode and l.IndustryCode=c.DM
   and c.LB=1804 and c.IVALUE=1"
-  indexInd <- sqlQuery(con,qr,stringsAsFactors=F)
+  indexName <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
 
-  indexQuote <- getIndexQuote(indexInd$stockID,begT,endT,variables='close',datasrc="jy")
-  indexQuote <- arrange(indexQuote,stockID,date)
+  indexQT <- getIndexQuote(indexInd$stockID,begT,endT,variables='close',datasrc="jy")
+  indexQT <- indexQT %>% arrange(stockID,date) %>% group_by(stockID) %>%
+    mutate(MA1=TTR::SMA(close,8),MA2=TTR::SMA(close,13),
+           MA3=TTR::SMA(close,21),MA4=TTR::SMA(close,34),
+           MA5=TTR::SMA(close,55),MA6=TTR::SMA(close,89),
+           MA7=TTR::SMA(close,144),MA8=TTR::SMA(close,233)) %>% ungroup()
+  indexQT <- reshape2::melt(indexQT,id=c("stockID","date","close"),
+                               variable.name = "MAtype", na.rm = TRUE, value.name = "MAclose")
+  indexQT <- indexQT %>% mutate(upMA=ifelse(close>MAclose,1,0)) %>%
+    group_by(stockID,date) %>% summarise(n=n(),score=sum(upMA)) %>% ungroup() %>%
+    filter(n==max(n)) %>% mutate(stockID=as.character(stockID)) %>%
+    left_join(indexName,by='stockID') %>%
+    select(date,stockID,industryName,score) %>%
+    arrange(date,desc(score))
 
-  indexScore <- data.frame()
-  for(i in 1:nrow(indexInd)){
-    tmp <- indexQuote[indexQuote$stockID==indexInd$stockID[i],]
-    tmp <- transform(tmp,MA1=TTR::SMA(close,8),MA2=TTR::SMA(close,13),
-                     MA3=TTR::SMA(close,21),MA4=TTR::SMA(close,34),
-                     MA5=TTR::SMA(close,55),MA6=TTR::SMA(close,89),
-                     MA7=TTR::SMA(close,144),MA8=TTR::SMA(close,233))
-    tmp <- na.omit(tmp)
-    tmp$score <- (tmp$close>tmp$MA1)+(tmp$close>tmp$MA2)+(tmp$close>tmp$MA3)+(tmp$close>tmp$MA4)+
-      (tmp$close>tmp$MA5)+(tmp$close>tmp$MA6)+(tmp$close>tmp$MA7)+(tmp$close>tmp$MA8)
-    tmp <- tmp[,c('date','stockID','score')]
-    tmp$industryName <- indexInd$industryName[i]
-    tmp <- tmp[,c( "date","stockID","industryName","score")]
-    indexScore <- rbind(indexScore,tmp)
-  }
-  indexScore <- arrange(indexScore,date,stockID)
-  odbcClose(con)
-  return(indexScore)
+  return(indexQT)
 }
 
 
