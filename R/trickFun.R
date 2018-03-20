@@ -618,7 +618,7 @@ getIndustryMA <- function(begT=as.Date('2005-01-04'),endT=Sys.Date()-1){
   and c.LB=1804 and c.IVALUE=1"
   indexName <- queryAndClose.odbc(db.jy(),qr,stringsAsFactors=FALSE)
 
-  indexQT <- getIndexQuote(indexInd$stockID,begT,endT,variables='close',datasrc="jy")
+  indexQT <- getIndexQuote(indexName$stockID,begT,endT,variables='close',datasrc="jy")
   indexQT <- indexQT %>% arrange(stockID,date) %>% group_by(stockID) %>%
     mutate(MA1=TTR::SMA(close,8),MA2=TTR::SMA(close,13),
            MA3=TTR::SMA(close,21),MA4=TTR::SMA(close,34),
@@ -1447,9 +1447,22 @@ resumeArbitrage <- function(begT,endT){
 # ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ======================
 
 
-#' write.clipboard
+#' read from or write to clipboard
 #'
-#' write data frame to clipboard
+#' @description \code{read.clipboard} read data from clipboard
+#' @description \code{write.clipboard} write data to clipboard
+#' @name read_write_clipboard
+#' @rdname read_write_clipboard
+#'
+#' @export
+#' @examples
+#' re <- read.clipboard()
+#' write.clipboard(re)
+read.clipboard <- function(file = "clipboard", sep = "\t",header = TRUE,...) {
+  read.table(file = file, sep = sep, header=header,...)
+}
+
+#' @rdname read_write_clipboard
 #' @export
 write.clipboard <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard-16384",sep="\t",row.names=row.names,col.names=col.names,...)
