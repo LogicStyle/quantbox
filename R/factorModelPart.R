@@ -438,6 +438,15 @@ gf.ROA_ttm <- function(TS){
 
 #' @rdname get_factor
 #' @export
+gf.ROIC <- function(TS) {
+  funchar <-  '"factorscore",Last12MData(Rdate,9901115)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  return(re)
+}
+
+
+#' @rdname get_factor
+#' @export
 gf.momentum <- function(TS,Nlong=250,Nshort=20){
   funchar <- paste("StockZf2(",Nlong,")",sep="")
   TSF <- getTech_ts(TS,funchar,varname="factorscore")

@@ -9,6 +9,7 @@
 \alias{gf.EP_ttm}
 \alias{gf.CFP_ttm}
 \alias{gf.ROA_ttm}
+\alias{gf.ROIC}
 \alias{gf.momentum}
 \alias{gf.lev_dtoa}
 \alias{gf.lev_ldtoop}
@@ -33,6 +34,8 @@ gf.EP_ttm(TS)
 gf.CFP_ttm(TS)
 
 gf.ROA_ttm(TS)
+
+gf.ROIC(TS)
 
 gf.momentum(TS, Nlong = 250, Nshort = 20)
 
