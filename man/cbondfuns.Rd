@@ -4,18 +4,24 @@
 \alias{cbondfuns}
 \alias{lcdb.build.Bond_ConBDExchangeQuote}
 \alias{lcdb.update.Bond_ConBDExchangeQuote}
+\alias{CBprice}
 \title{lcdb.build.Bond_ConBDExchangeQuote}
 \usage{
 lcdb.build.Bond_ConBDExchangeQuote()
 
 lcdb.update.Bond_ConBDExchangeQuote()
+
+CBprice(CBcode, begT, endT, vol = 250)
 }
 \description{
 lcdb.build.Bond_ConBDExchangeQuote
 
 lcdb.update.Bond_ConBDExchangeQuote
+
+CBprice
 }
 \examples{
 lcdb.build.Bond_ConBDExchangeQuote()
 lcdb.update.Bond_ConBDExchangeQuote()
+CBcode <- c('128026.SZ','113015.SH','113001.SH')
 }

@@ -4,10 +4,6 @@
 \alias{get_factor}
 \alias{gf.smartQ}
 \alias{gf.doublePrice}
-\alias{gf.dividendyield}
-\alias{gf.BP_mrq}
-\alias{gf.EP_ttm}
-\alias{gf.CFP_ttm}
 \alias{gf.ROA_ttm}
 \alias{gf.ROIC}
 \alias{gf.momentum}
@@ -18,20 +14,13 @@
 \alias{gf.G_NP_longterm}
 \alias{gf.G_OR_longterm}
 \alias{gf.ca_ratio}
+\alias{gf.F_NP_G}
 \title{get factor}
 \usage{
 gf.smartQ(TS, nwin = 20, cycle = "cy_1m()", bar = 0.2)
 
 gf.doublePrice(TS, PBFun = c("gf.PB_mrq", "gf.PB_lyr"),
   ROEFun = c("gf.ROE_ttm", "gf.ROE", "gf.F_ROE"))
-
-gf.dividendyield(TS, datasrc = c("ts", "jy", "wind"))
-
-gf.BP_mrq(TS)
-
-gf.EP_ttm(TS)
-
-gf.CFP_ttm(TS)
 
 gf.ROA_ttm(TS)
 
@@ -56,6 +45,8 @@ gf.G_OR_longterm(TS, N = 12, freq = "q",
   stat = "slope/mean", rm_N = 6)
 
 gf.ca_ratio(TS, fintype = c("PE", "PB", "PCF"), N = 5, inflaAdj = FALSE)
+
+gf.F_NP_G(TS, con_type = "1,2")
 }
 \arguments{
 \item{TS}{is \bold{TS} object.}

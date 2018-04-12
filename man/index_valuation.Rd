@@ -4,7 +4,12 @@
 \alias{index_valuation}
 \alias{lcdb.build.QT_IndexValuation}
 \alias{lcdb.update.QT_IndexValuation}
+\alias{lcdb.build.QT_IndexValuation_SW}
+\alias{lcdb.update.QT_IndexValuation_SW}
 \alias{getIndexValuation}
+\alias{getIndexValuation_SW}
+\alias{get_univ_valuation}
+\alias{calc_univ_valueper}
 \title{lcdb.build.QT_IndexValuation}
 \usage{
 lcdb.build.QT_IndexValuation(indexID = c("EI399006", "EI000933"),
@@ -12,21 +17,52 @@ lcdb.build.QT_IndexValuation(indexID = c("EI399006", "EI000933"),
 
 lcdb.update.QT_IndexValuation(begT, endT = Sys.Date() - 1)
 
+lcdb.build.QT_IndexValuation_SW(endT = as.Date("2017-12-31"))
+
+lcdb.update.QT_IndexValuation_SW(begT, endT = Sys.Date() - 1)
+
 getIndexValuation(valtype = c("PE", "PB"), caltype = "median",
   begT = as.Date("2001-01-04"), endT = Sys.Date() - 1)
+
+getIndexValuation_SW(begT = as.Date("2001-01-04"), endT = Sys.Date() - 1)
+
+get_univ_valuation(univID, begT, endT = Sys.Date() - 1, freq = "week",
+  valtype = c("PE", "PB", "eps", "bps"), caltype = c("median", "total",
+  "mean"), rmoutlier = FALSE, rmneg = FALSE, rmST = FALSE)
+
+calc_univ_valueper(TSV, nwin = 50, cumula = TRUE)
 }
 \description{
 lcdb.build.QT_IndexValuation
 
 lcdb.update.QT_IndexValuation
+
+lcdb.build.QT_IndexValuation_SW
+
+lcdb.update.QT_IndexValuation_SW
+
+get_univ_valuation
+
+calc_univ_valueper
 }
 \examples{
 lcdb.build.QT_IndexValuation()
 lcdb.update.QT_IndexValuation()
+lcdb.build.QT_IndexValuation_SW()
+lcdb.update.QT_IndexValuation_SW()
 re <- getIndexValuation()
 #get newest valuation
 re <- getIndexValuation(begT = Sys.Date(),endT = Sys.Date())
+re <- getIndexValuation_SW()
+indlist <- CT_industryList(std = 3,level=1)
+univID <- indlist$IndustryID
+TSV <- get_univ_valuation(univID)
+re <- calc_univ_valueper(TSV)
 }
 \author{
+Andrew Dow
+
+Andrew Dow
+
 Andrew Dow
 }

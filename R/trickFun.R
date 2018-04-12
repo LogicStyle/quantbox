@@ -455,6 +455,73 @@ lcdb.update.QT_IndexValuation<- function(begT,endT=Sys.Date()-1){
   return('Done!')
 }
 
+#' lcdb.build.QT_IndexValuation_SW
+#'
+#' @rdname index_valuation
+#' @author Andrew Dow
+#' @examples
+#' lcdb.build.QT_IndexValuation_SW()
+#' @export
+lcdb.build.QT_IndexValuation_SW <- function(endT=as.Date('2017-12-31')){
+  require(WindR)
+  w.start(showmenu = FALSE)
+  indexID <- w.wset('sectorconstituent',date=endT,'sectorid=a39901011g000000')[[2]]
+  indexID <- indexID %>% select(wind_code,sec_name)
+
+  indexvalue <- data.frame()
+  for(i in 1:nrow(indexID)){
+    indexvalue_<-w.wsd(indexID$wind_code[i],"pe_ttm,pb_lf","2005-01-04",endT)[[2]]
+    indexvalue_ <- indexvalue_ %>% mutate(id=indexID$wind_code[i],name=indexID$sec_name[i]) %>%
+      rename(date=DATETIME,indexID=id,indexName=name) %>% select(date,indexID,indexName,everything())
+    indexvalue <- rbind(indexvalue,indexvalue_)
+  }
+  indexvalue <- indexvalue %>% filter(!is.nan(PE_TTM)) %>% filter(!is.nan(PB_LF)) %>%
+    mutate(date=rdate2int(date))
+
+  con <- db.local('main')
+  dbWriteTable(con,'QT_IndexValuation_SW',indexvalue,row.names=FALSE)
+  dbDisconnect(con)
+  return('Done!')
+}
+
+#' lcdb.update.QT_IndexValuation_SW
+#'
+#' @rdname index_valuation
+#' @author Andrew Dow
+#' @examples
+#' lcdb.update.QT_IndexValuation_SW()
+#' @export
+lcdb.update.QT_IndexValuation_SW <- function(begT,endT=Sys.Date()-1){
+  con <- db.local('main')
+  if(missing(begT)){
+    begT <- dbGetQuery(con,"select max(date) 'date' from QT_IndexValuation_SW")
+    begT <- trday.nearby(intdate2r(begT$date),by=1)
+  }
+
+  if(begT<=endT){
+    require(WindR)
+    w.start(showmenu = FALSE)
+    indexID <- w.wset('sectorconstituent',date=endT,'sectorid=a39901011g000000')[[2]]
+    indexID <- indexID %>% select(wind_code,sec_name)
+
+    indexvalue <- data.frame()
+    for(i in 1:nrow(indexID)){
+      indexvalue_<-w.wsd(indexID$wind_code[i],"pe_ttm,pb_lf",begT,endT)[[2]]
+      indexvalue_ <- indexvalue_ %>% mutate(id=indexID$wind_code[i],name=indexID$sec_name[i]) %>%
+        rename(date=DATETIME,indexID=id,indexName=name) %>% select(date,indexID,indexName,everything())
+      indexvalue <- rbind(indexvalue,indexvalue_)
+    }
+    indexvalue <- indexvalue %>% filter(!is.nan(PE_TTM)) %>% filter(!is.nan(PB_LF)) %>%
+      mutate(date=rdate2int(date))
+
+    dbWriteTable(con,'QT_IndexValuation_SW',indexvalue,overwrite=FALSE,append=TRUE,row.names=FALSE)
+  }
+  dbDisconnect(con)
+  return('Done!')
+}
+
+
+
 
 #' @rdname index_valuation
 #' @export
@@ -510,6 +577,206 @@ getIndexValuation <- function(valtype=c('PE','PB'),caltype='median',
   dbDisconnect(con)
   return(result)
 }
+
+#' @rdname index_valuation
+#' @export
+#' @examples
+#' re <- getIndexValuation_SW()
+getIndexValuation_SW <- function(begT=as.Date('2001-01-04'),endT=Sys.Date()-1){
+
+  con <- db.local('main')
+  qr <- paste("select * from QT_IndexValuation_SW where date<=",rdate2int(endT),
+              " and date>= ",rdate2int(begT),sep="")
+  re <- dbGetQuery(con,qr)
+  dbDisconnect(con)
+  re <- re %>% mutate(date=intdate2r(date))
+  Nindex <- unique(re[,c('indexID','indexName')])
+
+  result <- data.frame()
+  for(i in 1:nrow(Nindex)){
+    Data <- re %>% dplyr::filter(indexID==Nindex$indexID[i]) %>% dplyr::select(-indexID,-indexName)
+
+    for(j in 2:ncol(Data)){
+      Datats <- xts::xts(Data[,j],order.by = Data[,1])
+      Datats <- TTR::runPercentRank(Datats, n = 250, cumulative = TRUE, exact.multiplier = 0.5)
+      Datats <-  data.frame(date=zoo::index(Datats),indexID=Nindex$indexID[i],
+                            indexName=Nindex$indexName[i],
+                            value=round(zoo::coredata(Datats),4),stringsAsFactors = FALSE)
+      Datats <- Datats[251:nrow(Datats),]
+      colnames(Datats) <- c('date','indexID','indexName',paste('per',colnames(Data)[j],sep = ''))
+      if(j==2){
+        result_ <- Datats
+      }else{
+        result_ <- dplyr::left_join(result_,Datats,by=c('date','indexID','indexName'))
+      }
+    }
+    result <- rbind(result,result_)
+  }
+
+  result <- result %>% dplyr::filter(date>=begT,date<=endT) %>%
+    left_join(re,by=c('date','indexID','indexName')) %>%
+    dplyr::arrange(date,desc(perPE_TTM+perPB_LF))
+
+  return(result)
+}
+
+
+#' get_univ_valuation
+#'
+#' @rdname index_valuation
+#' @examples
+#' indlist <- CT_industryList(std = 3,level=1)
+#' univID <- indlist$IndustryID
+#' TSV <- get_univ_valuation(univID)
+#' re <- calc_univ_valueper(TSV)
+#' @export
+get_univ_valuation <- function(univID,begT,endT=Sys.Date()-1,freq='week',
+                                valtype=c('PE','PB','eps','bps'),caltype=c('median','total','mean'),rmoutlier=FALSE,rmneg=FALSE,rmST=FALSE){
+
+  valtype <- match.arg(valtype)
+  caltype <- match.arg(caltype)
+
+  if(missing(begT)){
+    begT <- as.Date('2005-01-04')
+  }
+
+  RebDates <- getRebDates(begT,endT,rebFreq = freq)
+  TS <- data.frame()
+  for(i in 1:length(univID)){
+    TS_ <- getTS(RebDates,univID[i])
+    TS_ <- TS_ %>% mutate(sector=univID[i])
+    TS <- rbind(TS,TS_)
+  }
+
+  if(rmST){
+    TS <- is_st(TS)
+    TS <- TS %>% filter(is_st==FALSE) %>% select(-is_st)
+  }
+
+  TS_dis <- distinct(TS,date,stockID)
+
+  if(caltype=='total'){
+    tsbasic <- getTech(TS_dis,variables=c("close","total_shares"))
+    tsbasic <- tsbasic %>% mutate(total_shares=total_shares/1e4,cap=close*total_shares)
+  }
+
+  if(valtype %in% c('PE','PB')){
+    if(caltype %in% c('median','mean')){
+      #TSF_ <- gf.PE_ttm(TS_,fillna = FALSE)
+      if(valtype=='PE'){
+        TSF <- gf_lcfs(TS_dis,'F000005')
+      }else{
+        TSF <- gf_lcfs(TS_dis,'F000006')
+      }
+      TSF <- TSF %>% mutate(factorscore=1/factorscore)
+      TSF <- TS %>% left_join(TSF,by=c('date','stockID')) %>% filter(!is.na(factorscore))
+    }else if(caltype=='total'){
+      if(valtype=='PE'){
+        tslower <- gf.netprofit(TS_dis)
+      }else{
+        tslower <- gf.netbookvalue(TS_dis)
+      }
+      tslower <- tslower %>% rename(lower=factorscore) %>% select(-rptDate)
+      TSF <- tsbasic %>% select(date,stockID,cap) %>% rename(upper=cap) %>%
+        left_join(tslower,by=c('date','stockID'))
+      TSF <- TS %>% left_join(TSF,by=c('date','stockID')) %>% filter(!is.na(upper),!is.na(lower))
+    }
+
+  }else if(valtype %in% c('eps','bps')){
+    if(caltype %in% c('median','mean')){
+      if(valtype=='eps'){
+        TSF <- gf.eps(TS_dis)
+      }else{
+        TSF <- gf.bps(TS_dis)
+      }
+      TSF <- TS %>% left_join(TSF,by=c('date','stockID')) %>% filter(!is.na(factorscore))
+
+    }else if(caltype=='total'){
+      if(valtype=='eps'){
+        tsupper <- gf.netprofit(TS_dis)
+      }else{
+        tsupper <- gf.netbookvalue(TS_dis)
+      }
+
+      tsupper <- tsupper %>% rename(upper=factorscore) %>% select(-rptDate)
+      TSF <- tsbasic %>% select(date,stockID,total_shares) %>% rename(lower=total_shares) %>%
+        left_join(tsupper,by=c('date','stockID'))
+      TSF <- TS %>% left_join(TSF,by=c('date','stockID')) %>% filter(!is.na(upper),!is.na(lower))
+    }
+
+  }
+
+  if(caltype %in% c('median','mean')){
+    if(rmoutlier){
+      TSF <- factor_outlier(TSF, method = "mad", par = 1.5,sectorAttr = 'existing')
+    }
+
+    if(caltype=='median'){
+      TSFsum <- TSF %>% group_by(date,sector) %>% summarise(value=median(factorscore,na.rm = TRUE)) %>% ungroup()
+    }else if(caltype=='mean'){
+      TSFsum <- TSF %>% group_by(date,sector) %>% summarise(value=mean(factorscore,na.rm = TRUE)) %>% ungroup()
+    }
+
+  }else if(caltype=='total'){
+
+    if(valtype %in% c('PE','PB') && rmneg){
+      TSF <- TSF %>% filter(lower>0)
+    }else if(valtype %in% c('eps','bps') && rmneg){
+      TSF <- TSF %>% filter(upper>0)
+    }
+    TSFsum <- TSF %>% group_by(date,sector) %>% summarise(value=sum(upper,na.rm = TRUE)/sum(lower,na.rm = TRUE)) %>% ungroup()
+  }
+
+
+  TSFsum <- data.frame(TSFsum)
+  return(TSFsum)
+}
+
+
+#' calc_univ_valueper
+#' @rdname index_valuation
+#' @export
+calc_univ_valueper <- function(TSV,nwin=50,cumula = TRUE){
+  require(TTR)
+  TSV <- TSV %>% filter(!is.na(value))
+  TSV <- reshape2::dcast(TSV,date~sector,value.var = 'value')
+  TSVmat <- as.matrix(TSV[,-1])
+  result <- apply(TSVmat, 2,runPercentRank,n = nwin, cumulative = cumula, exact.multiplier = 0.5)
+  result <- data.frame(date=TSV[,1],result)
+  result <- result %>% slice((nwin+1):n())
+  result <- reshape2::melt(result,id="date",variable.name="sector",value.name = 'value',factorsAsStrings=FALSE)
+  return(result)
+}
+
+
+gf.eps <- function(TS){
+  funchar <-  '"factorscore",Last12MData(Rdate,9900000)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  return(re)
+}
+
+gf.bps <- function(TS){
+  funchar <-  '"factorscore",Last12MData(Rdate,9900003)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  return(re)
+}
+
+gf.netprofit <- function(TS){
+  funchar <-  '"factorscore",Last12MData(Rdate,46033)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  re$factorscore <- re$factorscore/1e8
+  return(re)
+}
+
+gf.netbookvalue <- function(TS){
+  funchar <-  '"factorscore",Last12MData(Rdate,44111)'
+  re <- TS.getFin_by_rptTS(TS,fun="rptTS.getFin_ts",funchar= funchar)
+  re$factorscore <- re$factorscore/1e8
+  return(re)
+}
+
+
+
 
 
 # ===================== ~ index timing  ====================
@@ -1614,6 +1881,7 @@ getIndexBasicInfo <- function(indexID) {
   return(re)
 }
 
+# ===================== ~ convertible bond  ====================
 
 #' lcdb.build.Bond_ConBDExchangeQuote
 #'
@@ -1732,6 +2000,53 @@ lcdb.update.Bond_ConBDExchangeQuote <- function(){
 
 
 
+
+#' CBprice
+#'
+#' @rdname cbondfuns
+#' @examples
+#' CBcode <- c('128026.SZ','113015.SH','113001.SH')
+#' @export
+CBprice <- function(CBcode,begT,endT,vol=250){
+  require(WindR)
+  WindR::w.start(showmenu = FALSE)
+  require(fOptions)
+
+  cbinfo <- WindR::w.wss(CBcode,'underlyingcode,ipo_date,delist_date,term')[[2]]
+  cbinfo <- cbinfo %>% mutate(IPO_DATE=w.asDateTime(IPO_DATE,asdate = TRUE),
+                              DELIST_DATE=w.asDateTime(DELIST_DATE,asdate = TRUE))
+  if(missing(begT)){
+    cbinfo <- cbinfo %>% mutate(begT=IPO_DATE)
+  }else{
+    cbinfo <- cbinfo %>% mutate(begT=begT) %>%
+      mutate(begT=ifelse(begT>=IPO_DATE,begT,IPO_DATE))
+  }
+
+  if(missing(endT)){
+    cbinfo <- cbinfo %>% mutate(endT=DELIST_DATE)
+  }else{
+    cbinfo <- cbinfo %>% mutate(endT=endT) %>%
+      mutate(endT=ifelse(endT<=DELIST_DATE,endT,DELIST_DATE))
+  }
+  cbinfo <- cbinfo %>% mutate(endT=ifelse(endT<=Sys.Date(),endT,Sys.Date())) %>%
+    mutate(endT=as.Date(endT,origin='1970-01-01'))
+
+  for(i in 1:nrow(cbinfo)){
+    cbts_<-WindR::w.wsd(cbinfo$CODE[i],'close,strbvalue,convprice,convvalue,ptmyear,impliedvol',cbinfo$begT[i],cbinfo$endT[i],"rfIndex=1")[[2]]
+    #stockts_ <- WindR::w.wsd(cbinfo$UNDERLYINGCODE[i],"close,annualstdevr_100w,annualstdevr_24m",cbinfo$begT[i],cbinfo$endT[i])[[2]]
+    TS <- data.frame(date=cbts_$DATETIME,
+                     stockID=stockID2stockID(cbinfo$UNDERLYINGCODE[i],'wind','local'),
+                     stringsAsFactors = FALSE)
+
+
+  }
+
+
+  p <- GBSOption(TypeFlag = "c", S = 10.22, X = 11.74, Time = 5.7260, r = 0.015,
+                 b = 0.015, sigma = 0.302862)
+  GBSVolatility(price, TypeFlag, S, X, Time, r, b, tol, maxiter)
+  p@price*100/11.74+84.12
+}
 
 
 
